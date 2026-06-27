@@ -1,0 +1,24 @@
+ Embeddings are a type of word representation that allows words with similar meanings to have a similar representation. They are a crucial part of many natural 
+language processing (NLP) models, especially those based on deep learning.
+
+In simple terms, an embedding is a numerical vector that represents each word in the vocabulary of the model. These vectors capture semantic properties of words, such 
+as their meaning and context, allowing the model to understand the relationships between words.
+
+Embeddings are learned during the training process of an NLP model. The goal is to minimize the distance between vectors representing words with similar meanings 
+while maximizing the distance between vectors representing dissimilar words. This is often achieved using techniques like word2vec, GloVe, or FastText.
+
+Now, let's talk about RAG (Recurrent Attention Gates). RAG is a mechanism used in some NLP models to improve their performance and flexibility. It combines the ideas 
+of recurrence (the ability to maintain an internal state across time steps) and attention (the ability to focus on relevant parts of the input) to better capture the 
+context of words in a sentence.
+
+RAG is particularly useful in tasks like machine translation, where it can help the model to pay more attention to certain words or phrases that are important for 
+understanding the meaning of the sentence. It does this by assigning different weights (or gates) to different parts of the input based on their relevance to the 
+current state and task at hand.
+
+In summary, embeddings are word representations used in NLP models to capture semantic properties, while RAG is a mechanism that combines recurrence and attention to 
+improve model performance by focusing on relevant parts of the input.
+
+
+real    2m6.322s
+user    0m0.123s
+sys     0m0.108s
