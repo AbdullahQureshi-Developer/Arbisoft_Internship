@@ -13,3 +13,10 @@ dependencies = [
     "scikit-learn>=1.9.0",
     "seaborn>=0.13.2",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
