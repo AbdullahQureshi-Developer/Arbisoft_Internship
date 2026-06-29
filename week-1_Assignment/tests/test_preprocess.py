@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src import clean_data
+from src.preprocess import clean_data
 
 
 def test_clean_data_removes_nulls():
