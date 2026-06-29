@@ -84,7 +84,8 @@ def main() -> None:
             console.print()
         except httpx.HTTPStatusError as exc:
             console.print()
-            console.print(f"[red]API error {exc.response.status_code}:[/] {exc.response.text}")
+            error_body = exc.response.text[:500]
+            console.print(f"[red]API error {exc.response.status_code}:[/] {error_body}")
             client.messages.pop()
         except httpx.HTTPError as exc:
             console.print()

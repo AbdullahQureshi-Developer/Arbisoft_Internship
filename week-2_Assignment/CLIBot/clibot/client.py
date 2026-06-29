@@ -57,30 +57,32 @@ class OpenRouterClient:
         return headers
 
     def _payload(self, stream: bool) -> dict[str, Any]:
+        MAX_TURNS = 10
+        recent = self.messages[-(MAX_TURNS * 2):]
         return {
             "model": self.model,
             "messages": [
-                {"role": message.role, "content": message.content}
-                for message in self.messages
+                {"role": message.role, "content": message.content} 
+                for message in recent
             ],
             "stream": stream,
         }
 
-    def send(self, user_text: str) -> str:
-        self.messages.append(ChatMessage(role="user", content=user_text))
+    # def send(self, user_text: str) -> str:
+    #     self.messages.append(ChatMessage(role="user", content=user_text))
 
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(
-                OPENROUTER_URL,
-                headers=self._headers(),
-                json=self._payload(stream=False),
-            )
-            response.raise_for_status()
-            data = response.json()
+    #     with httpx.Client(timeout=self.timeout) as client:
+    #         response = client.post(
+    #             OPENROUTER_URL,
+    #             headers=self._headers(),
+    #             json=self._payload(stream=False),
+    #         )
+    #         response.raise_for_status()
+    #         data = response.json()
 
-        reply = data["choices"][0]["message"]["content"]
-        self.messages.append(ChatMessage(role="assistant", content=reply))
-        return reply
+    #     reply = data["choices"][0]["message"]["content"]
+    #     self.messages.append(ChatMessage(role="assistant", content=reply))
+    #     return reply
 
     def stream(self, user_text: str) -> Iterator[str]:
         self.messages.append(ChatMessage(role="user", content=user_text))
@@ -108,7 +110,8 @@ class OpenRouterClient:
                         yield delta
 
         reply = "".join(chunks)
-        self.messages.append(ChatMessage(role="assistant", content=reply))
+        if reply:
+           self.messages.append(ChatMessage(role="assistant", content=reply))
 
     @staticmethod
     def _parse_stream_chunk(payload: str) -> str:
