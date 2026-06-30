@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
-        ConfusionMatrixDisplay,
-        accuracy_score,
-        confusion_matrix,
-        f1_score,
-        precision_score,
-        recall_score,
+    ConfusionMatrixDisplay,
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
 )
 
 
@@ -22,11 +22,11 @@ def evaluate_model(y_true, y_pred):
     print(f"F1 Score : {f1:.4f}")
 
     metrics = {
-            "Accuracy": accuracy,
-            "Precision": precision,
-            "Recall": recall,
-            "F1 Score": f1,
-        }
+        "Accuracy": accuracy,
+        "Precision": precision,
+        "Recall": recall,
+        "F1 Score": f1,
+    }
 
     plt.figure(figsize=(6, 4))
     plt.bar(metrics.keys(), metrics.values())
