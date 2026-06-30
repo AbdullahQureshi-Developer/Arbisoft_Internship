@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -58,31 +59,14 @@ class OpenRouterClient:
 
     def _payload(self, stream: bool) -> dict[str, Any]:
         MAX_TURNS = 10
-        recent = self.messages[-(MAX_TURNS * 2):]
+        recent = self.messages[-(MAX_TURNS * 2) :]
         return {
             "model": self.model,
             "messages": [
-                {"role": message.role, "content": message.content} 
-                for message in recent
+                {"role": message.role, "content": message.content} for message in recent
             ],
             "stream": stream,
         }
-
-    # def send(self, user_text: str) -> str:
-    #     self.messages.append(ChatMessage(role="user", content=user_text))
-
-    #     with httpx.Client(timeout=self.timeout) as client:
-    #         response = client.post(
-    #             OPENROUTER_URL,
-    #             headers=self._headers(),
-    #             json=self._payload(stream=False),
-    #         )
-    #         response.raise_for_status()
-    #         data = response.json()
-
-    #     reply = data["choices"][0]["message"]["content"]
-    #     self.messages.append(ChatMessage(role="assistant", content=reply))
-    #     return reply
 
     def stream(self, user_text: str) -> Iterator[str]:
         self.messages.append(ChatMessage(role="user", content=user_text))
@@ -111,7 +95,63 @@ class OpenRouterClient:
 
         reply = "".join(chunks)
         if reply:
-           self.messages.append(ChatMessage(role="assistant", content=reply))
+            self.messages.append(ChatMessage(role="assistant", content=reply))
+
+    def generate_with_metrics(self, prompt: str) -> dict[str, Any]:
+        """Stateless generation that captures usage metrics and latency."""
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+            "usage": {"include": True},
+        }
+
+        started = time.perf_counter()
+        ttft_s: float | None = None
+        chunks: list[str] = []
+        usage: dict[str, Any] = {}
+
+        with httpx.Client(timeout=self.timeout) as client:
+            with client.stream(
+                "POST",
+                OPENROUTER_URL,
+                headers=self._headers(),
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+
+                    raw = line.removeprefix("data: ").strip()
+                    if raw == "[DONE]":
+                        break
+
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if data.get("usage"):
+                        usage = data["usage"]
+
+                    choices = data.get("choices") or []
+                    if not choices:
+                        continue
+
+                    delta = (choices[0].get("delta") or {}).get("content") or ""
+                    if delta:
+                        if ttft_s is None:
+                            ttft_s = time.perf_counter() - started
+                        chunks.append(delta)
+
+        latency_s = time.perf_counter() - started
+        return {
+            "response": "".join(chunks),
+            "latency_s": latency_s,
+            "ttft_s": ttft_s,
+            "usage": usage,
+        }
 
     @staticmethod
     def _parse_stream_chunk(payload: str) -> str:

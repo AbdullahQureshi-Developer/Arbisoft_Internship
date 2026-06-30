@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import argparse
 import concurrent.futures
 import json
@@ -7,7 +8,6 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+from clibot.client import OpenRouterClient
 
 DEFAULT_MODELS = (
     ("nvidia/nemotron-3-ultra-550b-a55b:free", "Nemotron Ultra", "reasoning"),
@@ -24,9 +24,7 @@ DEFAULT_MODELS = (
     ("google/gemma-4-26b-a4b-it:free", "Gemma 4 26B", "balanced"),
 )
 
-DEFAULT_PROMPT = (
-    "How do you plan your day to stay productive?"
-)
+DEFAULT_PROMPT = "How do you plan your day to stay productive?"
 
 console = Console()
 
@@ -52,8 +50,7 @@ def load_api_key() -> str:
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         raise ValueError(
-            "OPENROUTER_API_KEY is not set. "
-            "Copy .env.example to .env and add your key."
+            "OPENROUTER_API_KEY is not set. Copy .env.example to .env and add your key."
         )
     return api_key
 
@@ -69,11 +66,13 @@ def load_models() -> list[tuple[str, str, str]]:
         for index, model_id in enumerate(overrides, start=1):
             if not model_id:
                 continue
-            models.append((
-                model_id,
-                os.getenv(f"COMPARE_MODEL_{index}_LABEL", model_id).strip(),
-                os.getenv(f"COMPARE_MODEL_{index}_TIER", "custom").strip(),
-            ))
+            models.append(
+                (
+                    model_id,
+                    os.getenv(f"COMPARE_MODEL_{index}_LABEL", model_id).strip(),
+                    os.getenv(f"COMPARE_MODEL_{index}_TIER", "custom").strip(),
+                )
+            )
         if models:
             return models
     return list(DEFAULT_MODELS)
@@ -117,50 +116,21 @@ def run_model(
     *,
     timeout: float = 120.0,
 ) -> ModelResult:
-    payload = {
-        "model": model_id,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": True,
-        "usage": {"include": True},
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
+    client = OpenRouterClient(
+        api_key=api_key,
+        model=model_id,
+        app_name="CLIBot",
+        timeout=timeout,
+    )
     started = time.perf_counter()
-    ttft_s: float | None = None
-    chunks: list[str] = []
-    usage: dict[str, Any] = {}
-
     try:
-        with httpx.Client(timeout=timeout) as client:
-            with client.stream(
-                "POST", OPENROUTER_URL, headers=headers, json=payload
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    raw = line.removeprefix("data: ").strip()
-                    if raw == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    if data.get("usage"):
-                        usage = data["usage"]
-                    choices = data.get("choices") or []
-                    if not choices:
-                        continue
-                    delta = (choices[0].get("delta") or {}).get("content") or ""
-                    if delta:
-                        if ttft_s is None:
-                            ttft_s = time.perf_counter() - started
-                        chunks.append(delta)
+        result = client.generate_with_metrics(prompt)
 
-        latency_s = time.perf_counter() - started
+        latency_s = result["latency_s"]
+        ttft_s = result["ttft_s"]
+        usage = result["usage"]
+        response_text = result["response"]
+
         prompt_tokens = int(usage.get("prompt_tokens") or 0)
         completion_tokens = int(usage.get("completion_tokens") or 0)
         total_tokens = int(
@@ -182,7 +152,7 @@ def run_model(
             tokens_per_second=_calc_tokens_per_second(
                 latency_s, ttft_s, completion_tokens
             ),
-            response="".join(chunks),
+            response=response_text,
         )
     except Exception as exc:
         latency_s = time.perf_counter() - started
@@ -191,7 +161,7 @@ def run_model(
             label=label,
             tier=tier,
             latency_s=latency_s,
-            ttft_s=ttft_s,
+            ttft_s=None,
             prompt_tokens=0,
             completion_tokens=0,
             total_tokens=0,
@@ -258,25 +228,36 @@ def print_summary(results: list[ModelResult]) -> None:
     table.add_column("Status")
 
     for result in results:
-        latency_style = "green" if fastest and not result.error and result.latency_s == fastest else ""
+        latency_style = (
+            "green"
+            if fastest and not result.error and result.latency_s == fastest
+            else ""
+        )
         cost_style = (
             "green"
-            if cheapest
+            if cheapest is not None
             and not result.error
             and result.cost_usd is not None
             and result.cost_usd == cheapest
             else ""
         )
-        status = Text("error", style="red") if result.error else Text("ok", style="green")
+        status = (
+            Text("error", style="red") if result.error else Text("ok", style="green")
+        )
 
         table.add_row(
             result.label,
             result.tier,
             Text(f"{result.latency_s:.2f}s", style=latency_style),
             f"{result.ttft_s:.2f}s" if result.ttft_s is not None else "n/a",
-            f"{result.tokens_per_second:.1f} tok/s" if result.tokens_per_second else "n/a",
+            f"{result.tokens_per_second:.1f} tok/s"
+            if result.tokens_per_second
+            else "n/a",
             str(result.total_tokens),
-            Text(f"${result.cost_usd:.6f}" if result.cost_usd is not None else "n/a", style=cost_style),
+            Text(
+                f"${result.cost_usd:.6f}" if result.cost_usd is not None else "n/a",
+                style=cost_style,
+            ),
             status,
         )
 
@@ -295,14 +276,16 @@ def print_responses(results: list[ModelResult]) -> None:
 
 def main() -> None:
     load_dotenv()
-    default_output = Path(__file__).parent / "results.json"
+    default_output = Path.cwd() / "results.json"
 
     parser = argparse.ArgumentParser(
         description="Compare 3 OpenRouter models on the same prompt."
     )
     parser.add_argument("--prompt", help="Prompt text (or use COMPARE_PROMPT env).")
     parser.add_argument("--prompt-file", type=Path, help="Read prompt from a file.")
-    parser.add_argument("--parallel", action="store_true", help="Run models concurrently.")
+    parser.add_argument(
+        "--parallel", action="store_true", help="Run models concurrently."
+    )
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument(
         "--output",

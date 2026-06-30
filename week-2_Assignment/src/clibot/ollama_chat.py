@@ -28,6 +28,7 @@ RESULTS_DIR.mkdir(exist_ok=True)
 
 prompt = ChatPromptTemplate.from_template(TEMPLATE)
 
+
 def ask_model(model_name: str, question: str) -> tuple[str, float]:
     """Run one model and return its response and execution time."""
 
@@ -90,11 +91,9 @@ def print_result(model_name: str, response: str, elapsed: float) -> None:
 
 
 def main() -> None:
-
     summary = []
 
     for model_name in MODELS:
-
         try:
             response, elapsed = ask_model(model_name, QUESTION)
 
