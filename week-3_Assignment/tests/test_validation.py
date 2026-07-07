@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from rag_app.structured import ExtractedInfo
+from rag_app.structured_extraction import ExtractedInfo
 
 
 def test_valid_extracted_info():

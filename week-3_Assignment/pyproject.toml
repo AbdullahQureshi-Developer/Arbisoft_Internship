@@ -5,8 +5,6 @@ description = "RAG Demo with ChromaDB, Embedding Comparisons, and Structured Out
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "httpx>=0.28.0",
-    "python-dotenv>=1.0.0",
     "rich>=13.9.0",
     "langchain-core>=0.3.0",
     "langchain>=0.3.0",
@@ -16,12 +14,14 @@ dependencies = [
     "chromadb>=0.6.0",
     "pypdf>=5.1.0",
     "pydantic>=2.10.0",
+    "streamlit>=1.38.0",
 ]
 
 [project.scripts]
-rag-demo = "rag_app.rag:main"
-rag-compare = "rag_app.compare:main"
-rag-structured = "rag_app.structured:main"
+rag-demo = "rag_app.rag_demo:main"
+rag-compare = "rag_app.embedding_compare:main"
+rag-structured = "rag_app.structured_extraction:main"
+rag-ui = "rag_app.app:main"
 
 [dependency-groups]
 dev = [

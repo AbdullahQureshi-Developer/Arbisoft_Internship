@@ -1,37 +1,54 @@
 import argparse
 
 from langchain_chroma import Chroma
-from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from rich.console import Console
 from rich.table import Table
+
+from rag_app.ingestion import load_and_split_documents
 
 console = Console()
 
 
-def load_documents(data_dir: str):
-    loader = PyPDFDirectoryLoader(data_dir)
-    documents = loader.load()
-    if not documents:
-        return []
-
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    return text_splitter.split_documents(documents)
-
-
-def create_store(splits, model_name: str, collection_name: str):
+def get_or_create_store(model_name: str, collection_name: str) -> Chroma:
     embeddings = OllamaEmbeddings(model=model_name)
-    vectorstore = Chroma.from_documents(
-        documents=splits,
-        embedding=embeddings,
+    vectorstore = Chroma(
+        embedding_function=embeddings,
         persist_directory="./chroma_db_compare",
         collection_name=collection_name,
     )
     return vectorstore
 
 
-def main():
+def ingest_incrementally(vectorstore: Chroma, splits: list[Document]) -> None:
+    collection = vectorstore._collection
+    if collection:
+        existing_data = collection.get()
+        if existing_data:
+            metadatas = existing_data.get("metadatas")
+            if metadatas is not None:
+                existing_ids = existing_data.get("ids", [])
+                existing_sources = {m.get("source", "") if m else "" for m in metadatas}
+
+                valid_sources = {doc.metadata.get("source", "") for doc in splits}
+                sources_to_delete = existing_sources - valid_sources
+
+                if sources_to_delete:
+                    ids_to_delete = [
+                        existing_ids[i]
+                        for i, m in enumerate(metadatas)
+                        if m and m.get("source", "") in sources_to_delete
+                    ]
+                    if ids_to_delete:
+                        vectorstore.delete(ids=ids_to_delete)
+
+    if splits:
+        ids = [doc.metadata["id"] for doc in splits]
+        vectorstore.add_documents(documents=splits, ids=ids)
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="Compare Embedding Models")
     parser.add_argument(
         "--model1", type=str, default="nomic-embed-text", help="First embedding model"
@@ -47,16 +64,18 @@ def main():
     )
     args = parser.parse_args()
 
-    splits = load_documents("data")
+    splits = load_and_split_documents("data")
     if not splits:
         console.print("[red]No documents to index![/red]")
         return
 
     console.print(f"[cyan]Indexing documents with {args.model1}...[/cyan]")
-    store1 = create_store(splits, args.model1, "model1_collection")
+    store1 = get_or_create_store(args.model1, "model1_collection")
+    ingest_incrementally(store1, splits)
 
     console.print(f"[cyan]Indexing documents with {args.model2}...[/cyan]")
-    store2 = create_store(splits, args.model2, "model2_collection")
+    store2 = get_or_create_store(args.model2, "model2_collection")
+    ingest_incrementally(store2, splits)
 
     console.print(f"\n[bold green]Query:[/bold green] {args.query}\n")
 
