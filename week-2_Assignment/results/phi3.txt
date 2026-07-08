@@ -1,0 +1,8 @@
+Model: phi3
+Question: Explain embeddings and RAG with a simple example.
+Time: 16.60 seconds
+--------------------------------------------------------------------------------
+
+Embeddings in machine learning represent words or phrases as vectors of numbers that capture their meanings, relationships, and context within data sets so computers can process them to perform tasks such as translation or sentiment analysis effectively. Imagine representing the word 'king' with a numerical vector where each dimension corresponds to some aspect of its meaning (e.g., relatedness to other royal titles like queen).
+
+RAG stands for RotatE, which is an algorithm used in natural language processing that helps quickly find semantically similar phrases by applying rotation operations on the embedding space – akin to finding near neighbors who share common features or themes with 'king' without comparing every pair of embeddings.
