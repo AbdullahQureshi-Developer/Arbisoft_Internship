@@ -7,17 +7,11 @@ from langchain_core.prompts import PromptTemplate
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from rich.console import Console
 
-from rag_app.ingestion import load_and_split_documents
+from rag_app.ingestion import load_and_split_documents, sync_vectorstore
 
 console = Console()
 
-# Set up observability logging
-os.makedirs("logs", exist_ok=True)
-logging.basicConfig(
-    filename="logs/rag_queries.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(message)s",
-)
+# Logging initialization moved to main()
 
 
 def create_or_load_vectorstore(
@@ -40,45 +34,22 @@ def main() -> None:
     parser.add_argument("--query", type=str, help="Query the RAG system")
     args = parser.parse_args()
 
+    # Set up observability logging
+    os.makedirs("logs", exist_ok=True)
+    logging.basicConfig(
+        filename="logs/rag_queries.log",
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+    )
+
     persist_dir = "./chroma_db"
 
     if args.ingest:
         splits = load_and_split_documents("data")
         vectorstore = create_or_load_vectorstore(persist_directory=persist_dir)
 
-        # Incremental Ingestion: Handle deletions
-        collection = vectorstore._collection
-        if collection:
-            existing_data = collection.get()
-            if existing_data:
-                metadatas = existing_data.get("metadatas")
-                if metadatas is not None:
-                    existing_ids = existing_data.get("ids", [])
-                    existing_sources = {
-                        m.get("source", "") if m else "" for m in metadatas
-                    }
-
-                    valid_sources = {doc.metadata.get("source", "") for doc in splits}
-                    sources_to_delete = existing_sources - valid_sources
-
-                    if sources_to_delete:
-                        ids_to_delete = [
-                            existing_ids[i]
-                            for i, m in enumerate(metadatas)
-                            if m and m.get("source", "") in sources_to_delete
-                        ]
-                        if ids_to_delete:
-                            console.print(
-                                f"[yellow]Deleting {len(ids_to_delete)} chunks "
-                                "from removed sources...[/yellow]"
-                            )
-                            vectorstore.delete(ids=ids_to_delete)
-
-        # Add or update chunks
-        if splits:
-            console.print("[cyan]Adding/Updating chunks in vector store...[/cyan]")
-            ids = [doc.metadata["id"] for doc in splits]
-            vectorstore.add_documents(documents=splits, ids=ids)
+        # Use shared incremental ingestion logic
+        sync_vectorstore(vectorstore, splits)
 
         console.print("[green]Incremental Ingestion complete![/green]")
 

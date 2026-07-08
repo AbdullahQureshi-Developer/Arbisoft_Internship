@@ -33,3 +33,38 @@ def load_and_split_documents(data_dir: str) -> list[Document]:
         f"{len(splits)} chunks.[/green]"
     )
     return splits
+
+
+def sync_vectorstore(vectorstore, splits) -> None:
+    """Synchronize a vectorstore with a set of document splits."""
+    if not splits:
+        console.print("[yellow]No documents to sync, skipping sync logic.[/yellow]")
+        return
+
+    existing_data = vectorstore.get()
+    if existing_data:
+        metadatas = existing_data.get("metadatas")
+        if metadatas is not None:
+            existing_ids = existing_data.get("ids", [])
+            existing_sources = {m.get("source", "") if m else "" for m in metadatas}
+
+            valid_sources = {doc.metadata.get("source", "") for doc in splits}
+            sources_to_delete = existing_sources - valid_sources
+
+            if sources_to_delete:
+                ids_to_delete = [
+                    existing_ids[i]
+                    for i, m in enumerate(metadatas)
+                    if m and m.get("source", "") in sources_to_delete
+                ]
+                if ids_to_delete:
+                    console.print(
+                        f"[yellow]Deleting {len(ids_to_delete)} chunks "
+                        "from removed sources...[/yellow]"
+                    )
+                    vectorstore.delete(ids=ids_to_delete)
+
+    if splits:
+        console.print("[cyan]Adding/Updating chunks in vector store...[/cyan]")
+        ids = [doc.metadata["id"] for doc in splits]
+        vectorstore.add_documents(documents=splits, ids=ids)

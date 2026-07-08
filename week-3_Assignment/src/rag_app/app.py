@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 
@@ -24,6 +25,14 @@ def create_or_load_vectorstore() -> Chroma | None:
 def build_ui() -> None:
     st.set_page_config(page_title="RAG App Demo", page_icon="📚")
     st.title("📚 RAG Pipeline Explorer")
+
+    # Ensure logs directory exists and configure logging
+    os.makedirs("logs", exist_ok=True)
+    logging.basicConfig(
+        filename="logs/rag_queries.log",
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+    )
 
     vectorstore = create_or_load_vectorstore()
 
@@ -85,9 +94,13 @@ def build_ui() -> None:
         st.markdown("**Was this answer helpful?**")
         col1, col2, _ = st.columns([1, 1, 10])
         with col1:
-            st.button("👍")
+            if st.button("👍"):
+                st.toast("Feedback recorded! Thanks for rating this helpful.")
+                logging.info(f"Feedback: POSITIVE for query '{query}'")
         with col2:
-            st.button("👎")
+            if st.button("👎"):
+                st.toast("Feedback recorded! We'll try to improve.")
+                logging.info(f"Feedback: NEGATIVE for query '{query}'")
 
 
 def main() -> None:
