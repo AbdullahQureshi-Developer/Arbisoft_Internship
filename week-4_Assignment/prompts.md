@@ -1,31 +1,145 @@
-# Prompts for Week 4 Assignment
+# Week 4 Assignment (Research Agent)
 
-## A
+## Prompt 1
 
-### prompt:1
+> Explain the architecture of a research agent built using LangGraph.
+> Include memory, web search, tools, hooks, and execution flow.
+> Give a simple diagram before writing any code.
 
-Set up a Python research agent project using uv for dependency management. Include pytest, ruff, and pre-commit from the start, with the pyproject.toml configured the standard way.
+---
 
-### prompt:2
+## Prompt 2
 
-Build out the LangChain agent in research_agent/agent.py using create_tool_calling_agent. It needs ConversationBufferMemory so it can actually remember things mentioned earlier in the conversation.
+> Compare LangChain Agent vs LangGraph for this assignment.
+> Which one is easier to extend with memory and hooks?
 
-### prompt:3
+---
 
-Now the tools, in research_agent/tools.py. First is WebSearchTool, which hits SerpAPI for web search, reading the key from SERPAPI_API_KEY, and pulls out both the organic results and the answer box. Second is FileReadTool, which reads local .txt and .pdf files, using pypdf for the PDF side.
+## Prompt 3
 
-### prompt:4
+> Suggest a clean project folder structure for a production-ready AI
+> project using uv, pytest, ruff, pre-commit, Streamlit and LangGraph.
 
-Add a hook that logs every tool call with a timestamp. Create a ToolCallLoggingCallbackHandler that extends BaseCallbackHandler and writes to logs/tool_calls.log on both on_tool_start and on_tool_end.
 
-### prompt:5
+---
 
-Write a demo script, research_agent/demo.py, that spins up the agent and walks it through a multi-hop task. First it reads data/sample.txt to pull out a company name. Then it searches the web for recent news on that company. Finally it asks what the company name was, to check that the memory actually works.
 
-### prompt:6
+## Prompt 4
 
-Add a quick pytest unit test in tests/test_tools.py for the read_file tool, checking that it reads a text file correctly and does not break when the file is missing.
+> Help me design the system prompt for a research assistant that answers
+> only from web search results and avoids hallucination.
 
-### prompt:7
+---
 
-Build a Streamlit UI for the agent in research_agent/app.py. Use st.chat_message for the conversation view, and st.session_state to keep the memory thread ID persistent across re-runs. Register it in pyproject.toml as agent-ui.
+## Prompt 5
+
+> Show different ways to initialize a LangGraph ReAct agent.
+> Explain the advantages and disadvantages of each approach.
+
+---
+
+## Prompt 6
+
+> Explain how the execution flow works inside LangGraph after the user
+> submits a query.
+
+
+---
+
+## Prompt 7
+
+> How should I integrate SerpAPI into a LangGraph tool?
+> Explain retries, timeout handling and error handling.
+
+---
+
+## Prompt 8
+
+> Review this search tool implementation.
+> Identify possible edge cases before I continue.
+
+---
+
+## Prompt 9
+
+> Explain different memory approaches:
+> session memory,
+> vector database,
+> persistent memory,
+> checkpoint memory.
+
+
+---
+
+## Prompt 10
+
+> Show how conversation history should be passed between agent executions.
+
+---
+
+## Prompt 11
+
+> Explain what hooks are inside an AI agent pipeline.
+> Give practical examples of logging tool usage.
+
+---
+
+## Prompt 12
+
+> Review my logging hook.
+> Suggest improvements for readability and maintainability.
+
+---
+
+## Prompt 13
+
+> I'm getting this traceback.
+> Explain the root cause before suggesting a fix.
+
+---
+
+## Prompt 14
+
+> Why is this exception happening?
+> List all possible causes from most likely to least likely.
+
+---
+
+## Prompt 15
+
+> Suggest better error handling without changing the overall architecture.
+
+---
+
+## Prompt 16
+
+> What unit tests should I write for this feature?
+> Cover success cases, invalid input and edge cases.
+
+---
+
+## Prompt 17
+
+> Review my pytest cases.
+> Which important scenarios are still missing?
+
+---
+
+## Prompt 18
+
+> Review this file like a senior AI Engineer.
+> Focus on readability, modularity and maintainability.
+> Ignore formatting issues.
+
+---
+
+## Prompt 19
+
+> Are there any violations of SOLID principles or unnecessary coupling
+> inside this implementation?
+
+
+---
+
+
+
