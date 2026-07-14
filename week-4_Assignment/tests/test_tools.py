@@ -1,27 +1,43 @@
-import os
+import pytest
 
-from research_agent.tools import read_file
+from research_agent.tools import ALLOWED_DATA_DIR, read_file
 
 
-def test_read_file_txt():
-    # Setup
+@pytest.fixture
+def sample_file():
+    ALLOWED_DATA_DIR.mkdir(parents=True, exist_ok=True)
     test_content = "Hello from test file"
-    test_file = "test_sample.txt"
-    with open(test_file, "w", encoding="utf-8") as f:
-        f.write(test_content)
+    test_path = ALLOWED_DATA_DIR / "test_sample.txt"
+    test_path.write_text(test_content, encoding="utf-8")
+    yield test_path.name, test_content
+    if test_path.exists():
+        test_path.unlink()
 
-    try:
-        # Act
-        result = read_file.invoke({"filepath": test_file})
 
-        # Assert
-        assert result == test_content
-    finally:
-        # Cleanup
-        if os.path.exists(test_file):
-            os.remove(test_file)
+def test_read_file_txt(sample_file):
+    filename, test_content = sample_file
+    result = read_file.invoke({"filepath": filename})
+    assert result == test_content
+
+
+def test_read_file_with_data_prefix(sample_file):
+    # Agent's system prompt refers to files as "data/<name>", so that
+    # form must resolve to the same location as the bare filename.
+    filename, test_content = sample_file
+    result = read_file.invoke({"filepath": f"data/{filename}"})
+    assert result == test_content
 
 
 def test_read_file_not_found():
     result = read_file.invoke({"filepath": "non_existent_file.txt"})
-    assert "Error: File 'non_existent_file.txt' does not exist." in result
+    assert "does not exist" in result
+
+
+def test_read_file_blocks_parent_traversal():
+    result = read_file.invoke({"filepath": "../.env"})
+    assert "not allowed" in result.lower()
+
+
+def test_read_file_blocks_absolute_path():
+    result = read_file.invoke({"filepath": "/etc/passwd"})
+    assert "not allowed" in result.lower()

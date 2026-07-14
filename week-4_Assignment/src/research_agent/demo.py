@@ -1,14 +1,16 @@
 from dotenv import load_dotenv
 
-from research_agent.agent import ToolCallLoggingCallbackHandler, build_agent_executor
+from research_agent.agent import build_agent_executor, extract_text
+from research_agent.hooks import ToolCallLoggingCallbackHandler
 
 
 def main() -> None:
     load_dotenv()
 
     print("Initializing Research Agent...")
-    # Change this to whichever local model you have installed that supports tool calling
-    agent_executor = build_agent_executor(model_name="gemini-2.5-flash")
+    # model_name defaults to DEFAULT_MODEL_NAME (see research_agent/config.py).
+    # Set the RESEARCH_AGENT_MODEL env var to override without editing code.
+    agent_executor = build_agent_executor()
     log_handler = ToolCallLoggingCallbackHandler()
 
     questions = [
@@ -28,9 +30,7 @@ def main() -> None:
         print(f"\n--- Question ---\n{q}\n")
         try:
             response = agent_executor.invoke({"messages": [("user", q)]}, config=config)
-            content = response["messages"][-1].content
-            if isinstance(content, list):
-                content = content[0].get("text", str(content))
+            content = extract_text(response["messages"][-1].content)
             print(f"\n--- Answer ---\n{content}\n")
         except Exception as e:
             print(f"\n--- Error ---\nAn error occurred: {e}")

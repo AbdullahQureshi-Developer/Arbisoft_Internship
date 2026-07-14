@@ -5,7 +5,8 @@ import uuid
 import streamlit as st
 from dotenv import load_dotenv
 
-from research_agent.agent import ToolCallLoggingCallbackHandler, build_agent_executor
+from research_agent.agent import build_agent_executor, extract_text
+from research_agent.hooks import ToolCallLoggingCallbackHandler
 
 
 def build_ui() -> None:
@@ -22,10 +23,10 @@ def build_ui() -> None:
     if "agent_executor" not in st.session_state:
         load_dotenv()
         try:
-            # We initialize it once per session
-            st.session_state.agent_executor = build_agent_executor(
-                model_name="gemini-2.5-flash"
-            )
+            # We initialize it once per session. model_name defaults to
+            # DEFAULT_MODEL_NAME (see research_agent/config.py) so it stays
+            # in sync with demo.py and agent.py automatically.
+            st.session_state.agent_executor = build_agent_executor()
             st.session_state.log_handler = ToolCallLoggingCallbackHandler()
         except Exception as e:
             st.error(f"Failed to initialize agent: {e}")
@@ -57,10 +58,7 @@ def build_ui() -> None:
                     )
 
                     # LangGraph returns a list of state messages, we grab the last one
-                    content = response["messages"][-1].content
-                    # Sometimes Gemini returns a list for content
-                    if isinstance(content, list):
-                        content = content[0].get("text", str(content))
+                    content = extract_text(response["messages"][-1].content)
 
                     st.markdown(content)
                     st.session_state.messages.append(
@@ -73,7 +71,13 @@ def build_ui() -> None:
 
 
 def main() -> None:
-    # This allows `agent-ui` to work as an entrypoint
+    # Streamlit apps normally have to be launched with `streamlit run app.py`,
+    # not `python app.py` -- Streamlit relies on its own script runner to set
+    # up the session. This `main()` is the console-script entrypoint (e.g.
+    # `agent-ui`, per pyproject.toml), so it re-invokes this same file through
+    # `python -m streamlit run` as a subprocess, letting `agent-ui` work as a
+    # normal command instead of requiring users to know the `streamlit run`
+    # incantation.
     app_path = os.path.abspath(__file__)
     import subprocess
 
