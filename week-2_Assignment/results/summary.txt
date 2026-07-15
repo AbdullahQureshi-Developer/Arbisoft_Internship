@@ -1,0 +1,6 @@
+Model Comparison Summary
+========================================
+
+phi3       : 16.60 seconds
+llama3     : 144.82 seconds
+mistral    : 132.18 seconds
