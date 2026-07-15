@@ -10,7 +10,6 @@ from sklearn.metrics import (
 
 
 def evaluate_model(y_true, y_pred):
-
     accuracy = accuracy_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred, average="macro")
     recall = recall_score(y_true, y_pred, average="macro")
