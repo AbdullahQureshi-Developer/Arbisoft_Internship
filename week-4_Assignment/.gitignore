@@ -14,4 +14,8 @@ __pycache__/
 .env
 
 # Log files
+<<<<<<< HEAD:week-4_Assignment/.gitignore
 logs/*.log
+=======
+*.log
+>>>>>>> main:week-1_Assignment/.gitignore
