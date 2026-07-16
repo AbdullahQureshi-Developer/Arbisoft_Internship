@@ -13,13 +13,7 @@ from langgraph.prebuilt import ToolNode
 from mcp.client.session import ClientSession
 
 
-# --- Tracing layer -----------------------------------------------------
-# Logs every MCP tool call and resource fetch made anywhere in the agent
-# graph (both compute_worker and info_worker subgraphs), with timing and
-# success/failure status. This is deliberately a plain stdlib logger
-# rather than a bespoke tracing backend, so it works out of the box with
-# no extra service to run; it composes with LangSmith tracing (enabled via
-# .env, see README) rather than replacing it.
+
 tracer = logging.getLogger("mcp_agent.trace")
 if not tracer.handlers:
     _handler = logging.StreamHandler()
@@ -120,10 +114,7 @@ INFO_SYSTEM_PROMPT = (
 def build_graph(mcp_session: ClientSession):
     llm = ChatAnthropic(model="claude-sonnet-4-6", temperature=0, max_tokens=500)
 
-    # --- Wrap MCP Tools ---
-    # Every wrapper is traced: each call is logged with its arguments,
-    # duration, and result/error, regardless of which worker (compute_worker
-    # or info_worker) invoked it.
+
     @traced_tool_call("tool", "calculate")
     async def mcp_calculate(expression: str) -> str:
         """Perform mathematical calculations on an expression."""
@@ -210,8 +201,6 @@ def build_graph(mcp_session: ClientSession):
         return {"messages": [response]}
 
     async def general_worker_node(state: AgentState):
-        # Fallback for messages that don't match info/compute keywords, e.g.
-        # greetings or open-ended questions. No tools bound here.
         messages = [SystemMessage(content=GENERAL_SYSTEM_PROMPT), *state['messages']]
         response = await llm.ainvoke(messages)
         return {"messages": [response]}
