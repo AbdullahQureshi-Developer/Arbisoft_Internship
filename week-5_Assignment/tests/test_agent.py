@@ -59,8 +59,8 @@ def test_determine_route_compute(content):
     ],
 )
 def test_determine_route_general_fallback(content):
-    # Previously these fell through to FINISH with no response at all.
-    assert determine_route(content) == "general_worker"
+    # Unmatched messages fall through to FINISH with no response.
+    assert determine_route(content) == "FINISH"
 
 
 def test_determine_route_info_takes_priority_over_compute():

@@ -75,25 +75,17 @@ COMPUTE_PATTERN = re.compile(r'\b(calculate|math|convert|temperature|count|words
 def determine_route(content: str) -> str:
     """Pure function: decide which worker should handle a human message.
 
-    Returns one of "info_worker", "compute_worker", or "general_worker".
-    Previously, unmatched messages silently fell through to FINISH with no
-    response at all (e.g. "hi", "thanks", "what can you do?"). Those now
-    route to a general_worker that can respond conversationally.
+    Returns one of "info_worker", "compute_worker", or "FINISH".
+    Unmatched messages fall through to FINISH with no response.
     """
     if INFO_PATTERN.search(content):
         return "info_worker"
     elif COMPUTE_PATTERN.search(content):
         return "compute_worker"
-    return "general_worker"
+    return "FINISH"
 
 
-GENERAL_SYSTEM_PROMPT = (
-    "You are a helpful assistant. Answer the user's message directly and "
-    "concisely. You do not have access to tools for this message (no "
-    "calculator, weather, time, or document lookup) — if the user's request "
-    "actually needs one of those, tell them what kind of question would let "
-    "you help (e.g. mentioning 'weather', 'calculate', 'convert', etc.)."
-)
+
 
 COMPUTE_SYSTEM_PROMPT = (
     "You are a computation assistant. Use the available tools (calculate, "
@@ -200,10 +192,7 @@ def build_graph(mcp_session: ClientSession):
         response = await info_llm.ainvoke(messages)
         return {"messages": [response]}
 
-    async def general_worker_node(state: AgentState):
-        messages = [SystemMessage(content=GENERAL_SYSTEM_PROMPT), *state['messages']]
-        response = await llm.ainvoke(messages)
-        return {"messages": [response]}
+
 
     compute_tools_node = ToolNode(compute_tools_list)
     info_tools_node = ToolNode(info_tools_list)
@@ -213,7 +202,7 @@ def build_graph(mcp_session: ClientSession):
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("compute_worker", compute_worker_node)
     workflow.add_node("info_worker", info_worker_node)
-    workflow.add_node("general_worker", general_worker_node)
+
     workflow.add_node("compute_tools", compute_tools_node)
     workflow.add_node("info_tools", info_tools_node)
 
@@ -237,8 +226,7 @@ def build_graph(mcp_session: ClientSession):
     workflow.add_conditional_edges("compute_worker", compute_router)
     workflow.add_conditional_edges("info_worker", info_router)
 
-    # general_worker never calls tools, so it goes straight to END.
-    workflow.add_edge("general_worker", END)
+
 
     # Supervisor routing
     def supervisor_router(state: AgentState):
