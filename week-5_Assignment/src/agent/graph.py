@@ -12,8 +12,6 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 from mcp.client.session import ClientSession
 
-
-
 tracer = logging.getLogger("mcp_agent.trace")
 if not tracer.handlers:
     _handler = logging.StreamHandler()
@@ -40,7 +38,10 @@ def traced_tool_call(kind: str, name: str):
                 elapsed_ms = (time.monotonic() - start) * 1000
                 tracer.info(
                     "ERROR kind=%s name=%s duration_ms=%.1f error=%s",
-                    kind, name, elapsed_ms, exc,
+                    kind,
+                    name,
+                    elapsed_ms,
+                    exc,
                 )
                 raise
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -49,7 +50,10 @@ def traced_tool_call(kind: str, name: str):
                 preview = preview[:200] + "...(truncated)"
             tracer.info(
                 "OK    kind=%s name=%s duration_ms=%.1f result=%s",
-                kind, name, elapsed_ms, preview,
+                kind,
+                name,
+                elapsed_ms,
+                preview,
             )
             return result
 
@@ -68,8 +72,20 @@ class AgentState(TypedDict):
 # Pulled out to module level (instead of nested inside build_graph) so the
 # routing logic can be unit-tested directly, without mocking an MCP session
 # or compiling a graph. See test_agent.py::test_determine_route.
-INFO_PATTERN = re.compile(r'\b(weather|time|policy|handbook|date)\b', re.IGNORECASE)
-COMPUTE_PATTERN = re.compile(r'\b(calculate|math|convert|temperature|count|words?)\b|[\+\-\*\/]', re.IGNORECASE)
+INFO_PATTERN = re.compile(r"\b(weather|time|policy|handbook|date)\b", re.IGNORECASE)
+# The bare-symbol alternatives require a digit on each side of the operator,
+# so they only fire on actual arithmetic ("5 + 5", "12/4") and not on
+# ordinary punctuation like hyphenated words ("co-worker", "sci-fi").
+# The minus sign specifically also requires whitespace on both sides
+# (\d\s+-\s+\d rather than \d\s*-\s*\d) — without that, digit-hyphen-digit
+# still matches inside dates like "07-20-2026", which don't have spaces
+# around the hyphen the way a written-out subtraction like "10 - 3" does.
+COMPUTE_PATTERN = re.compile(
+    r"\b(calculate|math|convert|temperature|count|words?)\b"
+    r"|\d\s*[\+\*\/]\s*\d"
+    r"|\d\s+-\s+\d",
+    re.IGNORECASE,
+)
 
 
 def determine_route(content: str) -> str:
@@ -83,8 +99,6 @@ def determine_route(content: str) -> str:
     elif COMPUTE_PATTERN.search(content):
         return "compute_worker"
     return "FINISH"
-
-
 
 
 COMPUTE_SYSTEM_PROMPT = (
@@ -105,7 +119,6 @@ INFO_SYSTEM_PROMPT = (
 
 def build_graph(mcp_session: ClientSession):
     llm = ChatAnthropic(model="claude-sonnet-4-6", temperature=0, max_tokens=500)
-
 
     @traced_tool_call("tool", "calculate")
     async def mcp_calculate(expression: str) -> str:
@@ -128,7 +141,9 @@ def build_graph(mcp_session: ClientSession):
     @traced_tool_call("tool", "convert_temperature")
     async def mcp_convert_temperature(value: float, unit: str) -> str:
         """Convert between Celsius and Fahrenheit."""
-        result = await mcp_session.call_tool("convert_temperature", {"value": value, "unit": unit})
+        result = await mcp_session.call_tool(
+            "convert_temperature", {"value": value, "unit": unit}
+        )
         return str(result.content)
 
     @traced_tool_call("tool", "word_count")
@@ -150,13 +165,39 @@ def build_graph(mcp_session: ClientSession):
         return str(result.contents)
 
     # --- LangChain Tools ---
-    calc_tool = StructuredTool.from_function(coroutine=mcp_calculate, name="calculate", description="Perform mathematical calculations on an expression.")
-    weather_tool = StructuredTool.from_function(coroutine=mcp_get_weather, name="get_weather", description="Return weather information for a given city.")
-    time_tool = StructuredTool.from_function(coroutine=mcp_get_current_time, name="get_current_time", description="Return the current date and time.")
-    temp_tool = StructuredTool.from_function(coroutine=mcp_convert_temperature, name="convert_temperature", description="Convert between Celsius and Fahrenheit. unit is 'C' or 'F'.")
-    word_tool = StructuredTool.from_function(coroutine=mcp_word_count, name="word_count", description="Count words in text.")
-    handbook_tool = StructuredTool.from_function(coroutine=mcp_get_student_handbook, name="get_student_handbook", description="Get the student handbook from the MCP server.")
-    policy_tool = StructuredTool.from_function(coroutine=mcp_get_company_policy, name="get_company_policy", description="Get the company policy from the MCP server.")
+    calc_tool = StructuredTool.from_function(
+        coroutine=mcp_calculate,
+        name="calculate",
+        description="Perform mathematical calculations on an expression.",
+    )
+    weather_tool = StructuredTool.from_function(
+        coroutine=mcp_get_weather,
+        name="get_weather",
+        description="Return weather information for a given city.",
+    )
+    time_tool = StructuredTool.from_function(
+        coroutine=mcp_get_current_time,
+        name="get_current_time",
+        description="Return the current date and time.",
+    )
+    temp_tool = StructuredTool.from_function(
+        coroutine=mcp_convert_temperature,
+        name="convert_temperature",
+        description="Convert between Celsius and Fahrenheit. unit is 'C' or 'F'.",
+    )
+    word_tool = StructuredTool.from_function(
+        coroutine=mcp_word_count, name="word_count", description="Count words in text."
+    )
+    handbook_tool = StructuredTool.from_function(
+        coroutine=mcp_get_student_handbook,
+        name="get_student_handbook",
+        description="Get the student handbook from the MCP server.",
+    )
+    policy_tool = StructuredTool.from_function(
+        coroutine=mcp_get_company_policy,
+        name="get_company_policy",
+        description="Get the company policy from the MCP server.",
+    )
 
     # Group tools by domain
     compute_tools_list = [calc_tool, temp_tool, word_tool]
@@ -183,16 +224,14 @@ def build_graph(mcp_session: ClientSession):
         return {"next_node": route}
 
     async def compute_worker_node(state: AgentState):
-        messages = [SystemMessage(content=COMPUTE_SYSTEM_PROMPT), *state['messages']]
+        messages = [SystemMessage(content=COMPUTE_SYSTEM_PROMPT), *state["messages"]]
         response = await compute_llm.ainvoke(messages)
         return {"messages": [response]}
 
     async def info_worker_node(state: AgentState):
-        messages = [SystemMessage(content=INFO_SYSTEM_PROMPT), *state['messages']]
+        messages = [SystemMessage(content=INFO_SYSTEM_PROMPT), *state["messages"]]
         response = await info_llm.ainvoke(messages)
         return {"messages": [response]}
-
-
 
     compute_tools_node = ToolNode(compute_tools_list)
     info_tools_node = ToolNode(info_tools_list)
@@ -225,8 +264,6 @@ def build_graph(mcp_session: ClientSession):
 
     workflow.add_conditional_edges("compute_worker", compute_router)
     workflow.add_conditional_edges("info_worker", info_router)
-
-
 
     # Supervisor routing
     def supervisor_router(state: AgentState):
