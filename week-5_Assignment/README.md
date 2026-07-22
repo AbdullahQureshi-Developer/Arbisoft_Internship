@@ -45,11 +45,12 @@ uv run streamlit run src/ui/app.py
 ```
 
 The Streamlit interface will open in your default browser. From there, you can ask the agent things like:
-- *"What's the weather in New York right now?"*
-- *"Calculate 250 * 42 + 10"*
-- *"What does the company policy say?"*
-- *"Convert 100 Celsius to Fahrenheit"*
-- *"Hi, what can you help me with?"* — general questions without a keyword match are handled by `general_worker` instead of returning no response.
+
+* *"What's the weather in New York right now?"*
+* *"Calculate 250 * 42 + 10"*
+* *"What does the company policy say?"*
+* *"Convert 100 Celsius to Fahrenheit"*
+* *"Hi, what can you help me with?"* — general questions without a keyword match are handled by `general_worker` instead of returning no response.
 
 ## Project Structure
 
