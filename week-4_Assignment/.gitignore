@@ -1,21 +1,13 @@
 # Virtual environment
 .venv/
-
 # Python cache
 __pycache__/
-
 # Pytest
 .pytest_cache/
-
 # Ruff
 .ruff_cache/
-
 # Environment variables
 .env
-
 # Log files
-<<<<<<< HEAD:week-4_Assignment/.gitignore
 logs/*.log
-=======
 *.log
->>>>>>> main:week-1_Assignment/.gitignore
