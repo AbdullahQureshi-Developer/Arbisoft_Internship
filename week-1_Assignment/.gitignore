@@ -1,32 +1,25 @@
-cat > .gitignore << 'EOF'
-# Virtual environments
+# Virtual environment
 .venv/
-venv/
-env/
-ENV/
 
 # Python cache
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 
-# Testing / linting caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Databases / local data
-*.sqlite3
-chroma_db/
-chroma_db_compare/
-
-# Logs
-*.log
+# VS Code settings (optional)
+.vscode/
 
 # Environment variables
 .env
 
+# Testing cache
+.pytest_cache/
+
+# Ruff cache
+.ruff_cache/
+
 # OS files
 .DS_Store
 Thumbs.db
-EOF
+
+# Log files
+*.log
