@@ -1,0 +1,6 @@
+- `[x]` Expand `task.md` with new requirements
+- `[x]` Install `streamlit` via `uv`
+- `[x]` Update `src/mcp_server/server.py` with new tools (`calculate(expression)`, `get_weather`, `get_current_time`, `convert_temperature`, `word_count`) and markdown resources
+- `[x]` Update `src/agent/graph.py` to dynamically load tools and resources from MCP server
+- `[x]` Create `src/ui/app.py` for the Streamlit chat interface
+- `[x]` Verify by running Streamlit locally
