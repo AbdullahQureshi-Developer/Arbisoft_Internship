@@ -1,0 +1,13 @@
+# Virtual environment
+.venv/
+# Python cache
+__pycache__/
+# Pytest
+.pytest_cache/
+# Ruff
+.ruff_cache/
+# Environment variables
+.env
+# Log files
+logs/*.log
+*.log

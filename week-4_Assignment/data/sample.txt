@@ -1,0 +1,83 @@
+== Company Research Brief ==
+
+Company Name: Apple Inc.
+Ticker Symbol: AAPL
+Stock Exchange: NASDAQ
+Industry: Consumer Electronics, Software, Online Services
+Headquarters: One Apple Park Way, Cupertino, California, USA
+Founded: April 1, 1976
+Founders: Steve Jobs, Steve Wozniak, Ronald Wayne
+
+== Leadership ==
+
+Current CEO: Tim Cook (took over from Steve Jobs in 2011)
+Current CFO: Luca Maestri
+Current Chief Design Officer: Alan Dye
+Board Chairman: Arthur Levinson
+
+== Products and Services ==
+
+Hardware:
+- iPhone: Apple's flagship smartphone, first launched in 2007 by Steve Jobs.
+- Mac: Personal computers running macOS, including MacBook Air, MacBook Pro, iMac, and Mac Pro.
+- iPad: Tablet computers running iPadOS.
+- Apple Watch: Smartwatch launched in 2015, now the world's best-selling watch.
+- AirPods: Wireless earphones launched in 2016, now a category leader.
+- Apple Vision Pro: Mixed reality headset launched in 2024 at $3,499.
+
+Software and Services:
+- iOS / macOS / watchOS / tvOS / visionOS: Apple's operating systems.
+- App Store: Digital distribution platform for apps, launched in 2008.
+- Apple Music: Streaming music service with over 100 million songs.
+- Apple TV+: Video streaming service launched in 2019.
+- iCloud: Cloud storage and sync service.
+- Apple Pay: Mobile payment system launched in 2014.
+- Siri: AI voice assistant, first introduced on iPhone 4S in 2011.
+- Apple Intelligence: Apple's generative AI platform, announced in 2024.
+
+== Financials ==
+
+Revenue (FY 2023): $383 billion USD
+Net Income (FY 2023): $97 billion USD
+Market Capitalization: Approximately $3 trillion USD (as of 2024)
+Number of Employees: Over 150,000 full-time employees worldwide
+Apple became the first U.S. company to reach a $1 trillion market cap in 2018.
+Apple became the first company globally to reach $3 trillion market cap in 2022.
+
+== Key Historical Milestones ==
+
+1976: Apple Computer Company founded in a garage in Los Altos, California.
+1984: Apple Macintosh launched — the first mass-market personal computer with a GUI.
+1997: Steve Jobs returned to Apple after being ousted; Apple nearly went bankrupt before his return.
+1998: iMac launched, beginning Apple's design renaissance.
+2001: iPod launched, transforming the music industry. iTunes Store launched in 2003.
+2007: iPhone launched, revolutionizing the smartphone industry.
+2010: iPad launched, creating the modern tablet market.
+2011: Steve Jobs passed away on October 5, 2011. Tim Cook became CEO.
+2020: Apple switched Mac computers from Intel processors to custom Apple Silicon (M1 chip).
+2023: Apple Vision Pro announced, entering the spatial computing market.
+2024: Apple Intelligence (on-device AI) announced at WWDC 2024.
+
+== Competitors ==
+
+Main competitors include:
+- Samsung Electronics (smartphones, tablets, chips)
+- Google / Alphabet (Android OS, Pixel phones, cloud services)
+- Microsoft (software, cloud, Surface devices)
+- Amazon (cloud services, Echo devices)
+- Meta (social media, VR headsets like Quest)
+
+== Supply Chain and Manufacturing ==
+
+Apple designs all its products in California but outsources manufacturing primarily to:
+- Foxconn (Hon Hai Precision): Main iPhone assembler based in Taiwan/China.
+- TSMC (Taiwan Semiconductor Manufacturing Company): Manufactures Apple's custom chips (A-series, M-series).
+- Broadcom: Supplies Wi-Fi and Bluetooth chips; Apple signed a multi-year supply extension through 2031.
+
+== Research Focus ==
+
+We are researching Apple Inc. to understand:
+1. How their latest product launches are performing in the market.
+2. The impact of Apple Intelligence (AI features) on iPhone upgrade cycles.
+3. Their financial performance and stock price momentum.
+4. Any recent news involving their manufacturing or supply chain.
