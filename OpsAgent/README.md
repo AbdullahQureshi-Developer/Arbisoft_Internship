@@ -50,3 +50,51 @@ To run the Slack Bot in Socket Mode:
 ```bash
 uv run python -m src.slack.bot
 ```
+
+## Development Workflow
+
+This project uses **Superpowers-style skills** via the [agy-superpowers](https://www.npmjs.com/package/agy-superpowers) framework. Skill files live in `.agents/skills/` and are automatically detected by the Antigravity IDE, making them available as slash commands in the TUI.
+
+### Available Slash Commands
+
+| Command | Description |
+|---|---|
+| `/brainstorming` | Structured brainstorming and ideation workflow |
+| `/writing-plans` | Write a detailed implementation plan before coding |
+| `/executing-plans` | Execute an approved plan step-by-step |
+| `/systematic-debugging` | Root-cause debugging with structured tracing |
+| `/test-driven-development` | TDD workflow — write tests first, then code |
+| `/requesting-code-review` | Prepare and request a code review |
+| `/receiving-code-review` | Process and action incoming code review feedback |
+| `/verification-before-completion` | Verify work is complete before marking done |
+| `/finishing-a-development-branch` | Checklist for merging and closing a branch |
+| `/subagent-driven-development` | Delegate tasks to parallel subagents |
+| `/dispatching-parallel-agents` | Fan-out work across multiple agents |
+| `/frontend-design` | UI/UX design workflow |
+| `/frontend-developer` | Frontend implementation workflow |
+| `/mobile-developer` | Mobile development workflow |
+| `/product-manager` | Product requirements and planning workflow |
+| `/using-superpowers` | Learn how to use the Superpowers skill system |
+| `/using-git-worktrees` | Git worktree workflow for parallel branches |
+| `/update-superpowers` | Update all skill files to the latest version |
+
+### Updating Skills
+To update all skill files to the latest version:
+```bash
+npx agy-superpowers@latest update
+```
+
+## Observability
+
+LangSmith tracing is enabled automatically via environment variables configured in `.env`:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your-langsmith-api-key
+LANGSMITH_PROJECT=OpsAgent
+```
+
+Traces, agent decisions, skill executions, latency, and token consumption are automatically logged and visible at [smith.langchain.com](https://smith.langchain.com) under project **"OpsAgent"**.
+
+

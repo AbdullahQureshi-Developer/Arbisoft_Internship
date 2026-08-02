@@ -36,8 +36,8 @@ def schedule_new_reminder(request: ScheduleReminderRequest) -> ScheduleReminderR
     """
     fire_at = datetime.utcnow() + timedelta(seconds=max(5, request.delay_seconds))
     reminder = create_reminder(
-        channel_id=request.channel_id,
         user_id=request.user_id,
+        channel_id=request.channel_id,
         message=request.message,
         fire_at=fire_at,
         task_id=request.task_id,
@@ -50,11 +50,12 @@ def schedule_new_reminder(request: ScheduleReminderRequest) -> ScheduleReminderR
 
 
 @log_call
-def check_and_deliver_pending_reminders(slack_say: Optional[Callable] = None) -> ReminderCheckResult:
+def check_and_deliver_pending_reminders(slack_say: Optional[Callable] = None, now: Optional[datetime] = None) -> ReminderCheckResult:
     """
-    Polls pending reminders where fire_at <= now and delivered = False, delivers via Slack, and marks delivered.
+    Polls pending reminders across all users where fire_at <= now and delivered = False, delivers via Slack, and marks delivered.
     """
-    now = datetime.utcnow()
+    if now is None:
+        now = datetime.utcnow()
     pending_list = get_pending_reminders(now=now)
     delivered_count = 0
     
@@ -63,7 +64,7 @@ def check_and_deliver_pending_reminders(slack_say: Optional[Callable] = None) ->
         if rem.user_id:
             msg_text = f"⏰ <@{rem.user_id}> **Reminder**: {rem.message}"
             
-        logger.info(f"Delivering scheduled reminder #{rem.id} to channel {rem.channel_id}")
+        logger.info(f"Delivering scheduled reminder #{rem.id} to user {rem.user_id} in channel {rem.channel_id}")
         
         if slack_say:
             try:
@@ -71,9 +72,9 @@ def check_and_deliver_pending_reminders(slack_say: Optional[Callable] = None) ->
             except Exception as e:
                 logger.error(f"Failed to send Slack message for reminder #{rem.id}: {e}")
         else:
-            logger.info(f"[SIMULATED SLACK DELIVERY] Channel: {rem.channel_id} | Message: {msg_text}")
+            logger.info(f"[SIMULATED SLACK DELIVERY] Channel: {rem.channel_id} | User: {rem.user_id} | Message: {msg_text}")
             
-        mark_reminder_delivered(rem.id)
+        mark_reminder_delivered(rem.id, user_id=rem.user_id)
         delivered_count += 1
         
     return ReminderCheckResult(delivered_count=delivered_count)

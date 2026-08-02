@@ -18,13 +18,14 @@ class SaveTasksResult(BaseModel):
 
 
 @log_call
-def save_extracted_tasks(tasks: List[ExtractedTask]) -> SaveTasksResult:
+def save_extracted_tasks(tasks: List[ExtractedTask], user_id: str) -> SaveTasksResult:
     """
-    Saves a list of Pydantic ExtractedTask models into SQLite tasks table via store.py.
+    Saves a list of Pydantic ExtractedTask models into SQLite tasks table via store.py scoped to user_id.
     """
     saved_list = []
     for task in tasks:
         db_task = create_task(
+            user_id=user_id,
             description=task.description,
             assignee=task.assignee or "",
             due_hint=task.due_hint or "",

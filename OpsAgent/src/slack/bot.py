@@ -1,6 +1,7 @@
 import os
 import logging
-from typing import Callable
+import urllib.request
+from typing import Callable, Optional
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -36,6 +37,20 @@ if client_secret:
     os.environ["SLACK_CLIENT_SECRET"] = client_secret
 
 
+def download_slack_file(url_private_download: str) -> Optional[bytes]:
+    """Downloads a private file from Slack using Bot token authentication."""
+    try:
+        req = urllib.request.Request(
+            url_private_download,
+            headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}
+        )
+        with urllib.request.urlopen(req) as resp:
+            return resp.read()
+    except Exception as e:
+        logger.error(f"Failed to download file from Slack ({url_private_download}): {e}")
+        return None
+
+
 @log_call
 def handle_slack_message(event: dict, say: Callable) -> str:
     """Core handler routing incoming Slack messages through Marshal LangGraph."""
@@ -48,8 +63,21 @@ def handle_slack_message(event: dict, say: Callable) -> str:
     if event.get("bot_id") or event.get("subtype") == "bot_message":
         logger.info("Ignoring message sent by bot itself.")
         return ""
+
+    file_bytes = None
+    file_name = None
+
+    files = event.get("files", [])
+    if files and isinstance(files, list):
+        first_file = files[0]
+        url_download = first_file.get("url_private_download") or first_file.get("url_private")
+        filename = first_file.get("name", "document.pdf")
+        if url_download and is_valid_token:
+            logger.info(f"Downloading file attachment '{filename}' from {url_download}")
+            file_bytes = download_slack_file(url_download)
+            file_name = filename
         
-    logger.info(f"Processing incoming message from {user_id} in {channel_id}: '{text}'")
+    logger.info(f"Processing incoming message from {user_id} in {channel_id}: '{text}' (file={file_name})")
     
     # Process through Marshal LangGraph
     response_text = process_slack_message(
@@ -57,6 +85,8 @@ def handle_slack_message(event: dict, say: Callable) -> str:
         channel_id=channel_id,
         user_id=user_id,
         thread_ts=thread_ts,
+        file_bytes=file_bytes,
+        file_name=file_name,
     )
     
     logger.info(f"Sending response back to Slack channel {channel_id}: {response_text[:60]}...")
