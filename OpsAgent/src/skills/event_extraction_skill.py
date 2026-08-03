@@ -2,12 +2,8 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from langchain_anthropic import ChatAnthropic
-from dotenv import load_dotenv
-
+from src.llm_client import get_llm
 from src.hooks.logging_hook import log_call
-
-load_dotenv()
 
 
 class ExtractedEvent(BaseModel):
@@ -32,11 +28,7 @@ def extract_event_details(text: str, current_time: Optional[datetime] = None) ->
 
     now_iso = current_time.isoformat()
 
-    llm = ChatAnthropic(
-        model_name="claude-haiku-4-5-20251001",
-        anthropic_api_key=api_key,
-        temperature=0.0,
-    )
+    llm = get_llm()
 
     structured_llm = llm.with_structured_output(ExtractedEvent)
 

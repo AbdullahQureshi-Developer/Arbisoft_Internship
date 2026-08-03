@@ -114,6 +114,13 @@ def handle_all_messages(body: dict, say: Callable):
     handle_slack_message(event=event, say=say)
 
 
+@app.event("file_shared")
+def handle_file_shared_events(body: dict, say: Callable):
+    event = body.get("event", {})
+    handle_slack_message(event=event, say=say)
+
+
+
 def start_socket_mode():
     """Start the app in Socket Mode and launch background reminder scheduler."""
     if not SLACK_APP_TOKEN:

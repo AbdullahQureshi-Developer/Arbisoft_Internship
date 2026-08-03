@@ -1,12 +1,8 @@
 import os
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from langchain_anthropic import ChatAnthropic
-from dotenv import load_dotenv
-
+from src.llm_client import get_llm
 from src.hooks.logging_hook import log_call
-
-load_dotenv()
 
 
 class ExtractedTask(BaseModel):
@@ -29,11 +25,7 @@ def extract_tasks_and_reminders(text: str) -> TaskExtractionResult:
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY is not configured in environment variables.")
 
-    llm = ChatAnthropic(
-        model_name="claude-haiku-4-5-20251001",
-        anthropic_api_key=api_key,
-        temperature=0.2,
-    )
+    llm = get_llm()
     
     structured_llm = llm.with_structured_output(TaskExtractionResult)
     

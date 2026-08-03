@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from langchain_anthropic import ChatAnthropic
+from src.llm_client import get_llm
 from src.hooks.logging_hook import log_call
 
 
@@ -24,11 +24,7 @@ def extract_dates_and_updates(text: str, reference_now: Optional[datetime] = Non
     if reference_now is None:
         reference_now = datetime.utcnow()
 
-    llm = ChatAnthropic(
-        model_name="claude-3-7-sonnet-20250219",
-        temperature=0.0,
-        api_key=os.getenv("ANTHROPIC_API_KEY", "dummy-key"),
-    )
+    llm = get_llm()
 
     structured_llm = llm.with_structured_output(ExtractedDatesAndUpdates)
 

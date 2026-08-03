@@ -2,12 +2,8 @@ import os
 import re
 from typing import Optional
 from pydantic import BaseModel, Field
-from langchain_anthropic import ChatAnthropic
-from dotenv import load_dotenv
-
+from src.llm_client import get_llm
 from src.hooks.logging_hook import log_call
-
-load_dotenv()
 
 
 class WorkflowIntent(BaseModel):
@@ -30,7 +26,7 @@ def classify_intent(message_text: str) -> WorkflowIntent:
 
     # 1. Regex fast-path for file review intent (e.g. "check my activity.py in week-5_Assignment repository")
     file_review_match = re.search(
-        r"(?:check|review)\s+(?:file\s+)?([\w\-\./]+\.[a-zA-Z0-9]+)\s+in\s+([\w\-\./]+)(?:\s+repository|\s+repo)?",
+        r"(?:check|review)\s+(?:file\s+|my\s+|file\s+my\s+)?([\w\-\./]+\.[a-zA-Z0-9]+)\s+in\s+([\w\-\./]+)(?:\s+repository|\s+repo)?",
         message_text,
         re.IGNORECASE
     )
@@ -79,11 +75,7 @@ def classify_intent(message_text: str) -> WorkflowIntent:
         return WorkflowIntent(intent_type="unknown")
 
     try:
-        llm = ChatAnthropic(
-            model_name="claude-haiku-4-5-20251001",
-            anthropic_api_key=api_key,
-            temperature=0.0,
-        )
+        llm = get_llm()
         structured_llm = llm.with_structured_output(WorkflowIntent)
         
         system_prompt = (

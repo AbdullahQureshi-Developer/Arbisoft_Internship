@@ -2,7 +2,7 @@ import os
 import logging
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from langchain_anthropic import ChatAnthropic
+from src.llm_client import get_llm
 from src.hooks.logging_hook import log_call
 
 logger = logging.getLogger(__name__)
@@ -19,11 +19,7 @@ def review_file_content(file_content: str, file_path: str = "") -> FileReviewRes
     """
     Performs a full-file code review (not diff-based) analyzing code quality, edge cases, and maintainability.
     """
-    llm = ChatAnthropic(
-        model_name="claude-3-7-sonnet-20250219",
-        temperature=0.0,
-        api_key=os.getenv("ANTHROPIC_API_KEY", "dummy-key"),
-    )
+    llm = get_llm()
 
     structured_llm = llm.with_structured_output(FileReviewResult)
 

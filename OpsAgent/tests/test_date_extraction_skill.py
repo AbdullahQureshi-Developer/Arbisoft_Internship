@@ -27,7 +27,7 @@ def test_date_extraction_skill_mocked(monkeypatch):
         def with_structured_output(self, schema):
             return MockStructuredRunnable()
 
-    monkeypatch.setattr("src.skills.date_extraction_skill.ChatAnthropic", lambda **kwargs: MockLLM())
+    monkeypatch.setattr("src.skills.date_extraction_skill.get_llm", lambda: MockLLM())
 
     res = extract_dates_and_updates(sample_text)
     assert len(res.dates) == 2

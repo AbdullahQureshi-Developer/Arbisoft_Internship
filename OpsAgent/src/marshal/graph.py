@@ -1,5 +1,6 @@
 import time
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import TypedDict, Optional, List, Dict, Any
 from dotenv import load_dotenv
@@ -242,19 +243,27 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
 
         combined_text = f"{state['message_text']}\n\nDocument Content:\n{doc_text}".strip()
 
-        # Run extraction skills
-        summary_res = summarize_text(combined_text)
-        task_res = extract_tasks_and_reminders(combined_text)
-        save_res = save_extracted_tasks(task_res.tasks, user_id=user_id)
-
         now = datetime.utcnow()
-        dates_and_updates = extract_dates_and_updates(combined_text, reference_now=now)
+
+        # Run extraction skills in parallel
+        with ThreadPoolExecutor() as executor:
+            future_summary = executor.submit(summarize_text, combined_text)
+            future_tasks = executor.submit(extract_tasks_and_reminders, combined_text)
+            future_dates = executor.submit(lambda: extract_dates_and_updates(combined_text, reference_now=now))
+
+            summary_res = future_summary.result()
+            task_res = future_tasks.result()
+            dates_and_updates = future_dates.result()
+
+        save_res = save_extracted_tasks(task_res.tasks, user_id=user_id)
 
         routed_dates_info = []
         for date_item in dates_and_updates.dates:
             dt = date_item.date
             desc = date_item.description
-            time_until = dt - now
+            
+            dt_naive = dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+            time_until = dt_naive - now
             total_seconds = time_until.total_seconds()
 
             if total_seconds < 0:
