@@ -19,3 +19,19 @@ def test_task_extraction_mocked(monkeypatch):
     assert isinstance(res, TaskExtractionResult)
     assert len(res.tasks) == 2
     assert res.tasks[0].assignee == "Abdullah"
+
+
+def test_task_extraction_result_stringified_json():
+    # Scenario A: tasks receives a stringified dict containing {"tasks": [...]}
+    raw_str_dict = '{"tasks": [{"description": "Review PR", "assignee": "Alice"}]}'
+    res_a = TaskExtractionResult(tasks=raw_str_dict)
+    assert len(res_a.tasks) == 1
+    assert res_a.tasks[0].description == "Review PR"
+    assert res_a.tasks[0].assignee == "Alice"
+
+    # Scenario B: tasks receives a stringified JSON list '[{...}]'
+    raw_str_list = '[{"description": "Submit report", "assignee": "Bob"}]'
+    res_b = TaskExtractionResult(tasks=raw_str_list)
+    assert len(res_b.tasks) == 1
+    assert res_b.tasks[0].description == "Submit report"
+    assert res_b.tasks[0].assignee == "Bob"

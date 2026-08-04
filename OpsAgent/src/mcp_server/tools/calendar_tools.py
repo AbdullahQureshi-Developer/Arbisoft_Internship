@@ -1,6 +1,4 @@
-import os
 import logging
-import uuid
 from typing import Any, Dict, List, Optional
 from src.hooks.logging_hook import log_call
 
@@ -57,15 +55,5 @@ def create_event(
             "attendees": attendees,
         }
     except Exception as e:
-        logger.warning(f"Google Calendar API call failed/skipped ({e}). Returning structured event data.")
-        mock_id = f"evt_{uuid.uuid4().hex[:12]}"
-        return {
-            "status": "success",
-            "event_id": mock_id,
-            "html_url": f"https://calendar.google.com/calendar/event?eid={mock_id}",
-            "title": title,
-            "start_time": start_time,
-            "end_time": end_time,
-            "attendees": attendees,
-            "note": f"Handled with fallback: {str(e)}",
-        }
+        logger.error(f"Google Calendar API call failed for event '{title}': {e}")
+        raise

@@ -1,6 +1,7 @@
+import json
 import os
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from src.llm_client import get_llm
 from src.hooks.logging_hook import log_call
 
@@ -14,6 +15,20 @@ class ExtractedTask(BaseModel):
 
 class TaskExtractionResult(BaseModel):
     tasks: List[ExtractedTask] = Field(default_factory=list, description="Extracted action items")
+
+    @field_validator("tasks", mode="before")
+    @classmethod
+    def parse_tasks_if_string(cls, v):
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict) and "tasks" in parsed:
+                    return parsed["tasks"]
+                if isinstance(parsed, list):
+                    return parsed
+            except Exception:
+                pass
+        return v
 
 
 @log_call

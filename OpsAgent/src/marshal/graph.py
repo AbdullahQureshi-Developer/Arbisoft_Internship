@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import TypedDict, Optional, List, Dict, Any
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 load_dotenv()
 
@@ -13,11 +13,10 @@ load_dotenv()
 from src.hooks.logging_hook import log_call
 from src.marshal.router import classify_intent, WorkflowIntent
 from src.agents.github_agent import (
-    fetch_pr_diff, post_review_comment, fetch_file_content,
-    FetchPRRequest, PostCommentRequest, FetchFileContentRequest
+    fetch_pr_diff, post_review_comment,
+    FetchPRRequest, PostCommentRequest
 )
 from src.skills.review_skill import review_pr_diff
-from src.skills.file_review_skill import review_file_content
 from src.skills.summarization_skill import summarize_text
 from src.skills.task_extraction_skill import extract_tasks_and_reminders
 from src.skills.date_extraction_skill import extract_dates_and_updates
@@ -99,48 +98,6 @@ def github_review_step(state: OpsAgentState) -> OpsAgentState:
 
     return state
 
-
-@log_call
-def github_file_review_step(state: OpsAgentState) -> OpsAgentState:
-    intent = state.get("intent")
-    if not intent or not intent.file_path or not intent.repo:
-        state["result_text"] = "⚠️ Could not identify repository or file path for file review."
-        return state
-
-    repo = intent.repo
-    file_path = intent.file_path
-    target_pr = intent.target_pr_number
-
-    try:
-        file_res = fetch_file_content(FetchFileContentRequest(repo=repo, file_path=file_path))
-        review = review_file_content(file_content=file_res.content, file_path=file_path)
-        issues_formatted = "\n".join([f"• {issue}" for issue in review.issues]) or "None"
-
-        if target_pr:
-            post_body = f"### File Review: `{file_path}`\n\n{review.comment_text}"
-            post_res = post_review_comment(PostCommentRequest(repo=repo, pr_number=target_pr, body=post_body))
-
-            state["result_text"] = (
-                f"✅ **File Review Posted to PR #{target_pr}** (`{file_path}` in `{repo}`)\n\n"
-                f"**Summary**:\n{review.summary}\n\n"
-                f"**Issues Identified** ({len(review.issues)}):\n{issues_formatted}\n\n"
-                f"🔗 [View Comment on GitHub]({post_res.html_url or file_res.html_url})"
-            )
-        else:
-            state["result_text"] = (
-                f"🔍 **File Code Review Complete** (`{file_path}` in `{repo}`)\n\n"
-                f"**Summary**:\n{review.summary}\n\n"
-                f"**Issues Identified** ({len(review.issues)}):\n{issues_formatted}\n\n"
-                f"**Detailed Review Comment**:\n{review.comment_text}\n\n"
-                f"💡 **PR Comment Offer**: Would you like to attach this review as a comment to a PR? "
-                f"Reply with `post to PR #<number>`."
-            )
-    except Exception as e:
-        logger.error(f"Error in file review step for {repo}/{file_path}: {e}")
-        state["result_text"] = f"❌ Failed to review file `{file_path}` in repository `{repo}`: {e}"
-        state["error"] = str(e)
-
-    return state
 
 
 @log_call
@@ -236,7 +193,7 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
     channel_id = state["channel_id"]
 
     try:
-        if file_bytes:
+        if file_bytes is not None:
             doc_text = parse_document(file_bytes=file_bytes, filename=file_name)
         else:
             doc_text = state["message_text"]
@@ -304,8 +261,17 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
             f"📅 **Extracted Dates & Scheduled Items**:\n{dates_formatted}\n\n"
             f"💡 **Notable Updates & Decisions**:\n{updates_formatted}"
         )
+    except ValidationError as ve:
+        raw_inputs = [err.get("input") for err in ve.errors()]
+        logger.error(
+            f"Pydantic ValidationError processing document `{file_name}`: {ve}\n"
+            f"Validation errors detail: {ve.errors()}\n"
+            f"Raw/Failed input values: {raw_inputs}"
+        )
+        state["result_text"] = f"❌ Error processing document `{file_name}`: Model output failed schema validation ({ve.error_count()} validation error(s): {ve})"
+        state["error"] = str(ve)
     except Exception as e:
-        logger.error(f"Error processing document: {e}")
+        logger.error(f"Error processing document `{file_name}`: {e}")
         state["result_text"] = f"❌ Error processing document `{file_name}`: {e}"
         state["error"] = str(e)
 
@@ -318,10 +284,9 @@ def unknown_step(state: OpsAgentState) -> OpsAgentState:
         "🤖 **OpsAgent Assistant**\n"
         "I can help you with:\n"
         "1. **GitHub PR Reviews**: Say `review PR #123` or `can you check PR 123`.\n"
-        "2. **GitHub File Reviews**: Say `check my activity.py in week-5_Assignment repository`.\n"
-        "3. **Tasks & Reminders**: Paste meeting notes and say `summarize these, extract tasks, and remind me tomorrow to follow up`.\n"
-        "4. **Calendar Scheduling**: Say `schedule a meeting with John tomorrow at 3pm`.\n"
-        "5. **Document Upload**: Attach a PDF or DOCX file for rich extraction & date routing."
+        "2. **Tasks & Reminders**: Paste meeting notes and say `summarize these, extract tasks, and remind me tomorrow to follow up`.\n"
+        "3. **Calendar Scheduling**: Say `schedule a meeting with John tomorrow at 3pm`.\n"
+        "4. **Document Upload**: Attach a PDF or DOCX file for rich extraction & date routing."
     )
     return state
 
@@ -334,8 +299,6 @@ def route_decision(state: OpsAgentState) -> str:
         return "unknown"
     if intent.intent_type == "github_review":
         return "github_review"
-    elif intent.intent_type == "github_file_review":
-        return "github_file_review"
     elif intent.intent_type == "task_and_reminder":
         return "task_and_reminder"
     elif intent.intent_type == "calendar_schedule":
@@ -347,7 +310,6 @@ def route_decision(state: OpsAgentState) -> str:
 builder = StateGraph(OpsAgentState)
 builder.add_node("classify", classify_step)
 builder.add_node("github_review", github_review_step)
-builder.add_node("github_file_review", github_file_review_step)
 builder.add_node("task_and_reminder", task_reminder_step)
 builder.add_node("calendar_schedule", calendar_schedule_step)
 builder.add_node("document_processing", document_processing_step)
@@ -359,7 +321,6 @@ builder.add_conditional_edges(
     route_decision,
     {
         "github_review": "github_review",
-        "github_file_review": "github_file_review",
         "task_and_reminder": "task_and_reminder",
         "calendar_schedule": "calendar_schedule",
         "document_processing": "document_processing",
@@ -367,7 +328,6 @@ builder.add_conditional_edges(
     },
 )
 builder.add_edge("github_review", END)
-builder.add_edge("github_file_review", END)
 builder.add_edge("task_and_reminder", END)
 builder.add_edge("calendar_schedule", END)
 builder.add_edge("document_processing", END)

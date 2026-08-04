@@ -1,6 +1,6 @@
 import os
 import logging
-import urllib.request
+import requests
 from typing import Callable, Optional
 from dotenv import load_dotenv
 from slack_bolt import App
@@ -37,18 +37,18 @@ if client_secret:
     os.environ["SLACK_CLIENT_SECRET"] = client_secret
 
 
-def download_slack_file(url_private_download: str) -> Optional[bytes]:
+def download_slack_file(url_private_download: str, filename: str = "document") -> bytes:
     """Downloads a private file from Slack using Bot token authentication."""
-    try:
-        req = urllib.request.Request(
-            url_private_download,
-            headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}
-        )
-        with urllib.request.urlopen(req) as resp:
-            return resp.read()
-    except Exception as e:
-        logger.error(f"Failed to download file from Slack ({url_private_download}): {e}")
-        return None
+    headers = {"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}
+    response = requests.get(url_private_download, headers=headers, allow_redirects=True, timeout=30)
+    response.raise_for_status()
+
+    content = response.content
+    if not content:
+        raise ValueError(f"Downloaded file '{filename}' from Slack is empty (0 bytes).")
+
+    logger.info(f"Downloaded {len(content)} bytes for {filename}")
+    return content
 
 
 @log_call
@@ -74,8 +74,13 @@ def handle_slack_message(event: dict, say: Callable) -> str:
         filename = first_file.get("name", "document.pdf")
         if url_download and is_valid_token:
             logger.info(f"Downloading file attachment '{filename}' from {url_download}")
-            file_bytes = download_slack_file(url_download)
-            file_name = filename
+            try:
+                file_bytes = download_slack_file(url_download, filename=filename)
+                file_name = filename
+            except Exception as e:
+                logger.error(f"Failed to download attachment '{filename}': {e}")
+                file_bytes = b""
+                file_name = filename
         
     logger.info(f"Processing incoming message from {user_id} in {channel_id}: '{text}' (file={file_name})")
     

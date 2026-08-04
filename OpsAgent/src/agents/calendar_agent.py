@@ -14,7 +14,7 @@ class CreateEventRequest(BaseModel):
 class CreateEventResult(BaseModel):
     status: str
     event_id: str
-    html_url: str
+    html_url: Optional[str] = None
     title: str
     start_time: str
     end_time: str

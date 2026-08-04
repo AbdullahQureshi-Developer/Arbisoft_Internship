@@ -1,6 +1,6 @@
 import logging
 from mcp.server.fastmcp import FastMCP
-from src.mcp_server.tools.github_tools import get_pr as _get_pr, post_pr_comment as _post_pr_comment, get_file_content as _get_file_content
+from src.mcp_server.tools.github_tools import get_pr as _get_pr, post_pr_comment as _post_pr_comment
 from src.mcp_server.tools.calendar_tools import create_event as _create_event
 
 logger = logging.getLogger("mcp_server")
@@ -13,12 +13,6 @@ mcp = FastMCP("OpsAgent-MCP-Server")
 def get_pr(repo: str, pr_number: int) -> dict:
     """Fetch PR details and diff from GitHub REST API."""
     return _get_pr(repo=repo, pr_number=pr_number)
-
-
-@mcp.tool()
-def get_file_content(repo: str, file_path: str, ref: str = "main") -> dict:
-    """Fetch file content directly from GitHub repository by path."""
-    return _get_file_content(repo=repo, file_path=file_path, ref=ref)
 
 
 @mcp.tool()

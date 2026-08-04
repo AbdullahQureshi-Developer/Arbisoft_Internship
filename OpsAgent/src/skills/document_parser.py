@@ -24,7 +24,7 @@ def parse_document(file_bytes: bytes, filename: str) -> str:
     using Microsoft's MarkItDown library via convert_stream().
     """
     if not file_bytes:
-        return ""
+        raise ValueError(f"Document file '{filename}' is empty or invalid (0 bytes).")
 
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     file_ext = f".{ext}" if ext else ""

@@ -11,6 +11,8 @@ load_dotenv()
 def get_llm(
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
+    max_tokens: Optional[int] = 4096,
+    max_retries: Optional[int] = 5,
     api_key: Optional[str] = None,
 ) -> ChatAnthropic:
     """
@@ -28,6 +30,10 @@ def get_llm(
 
     if temperature is not None:
         kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+    if max_retries is not None:
+        kwargs["max_retries"] = max_retries
 
     return ChatAnthropic(**kwargs)
 
@@ -37,11 +43,13 @@ def call_claude(
     system_prompt: Optional[str] = None,
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
+    max_tokens: Optional[int] = 4096,
+    max_retries: Optional[int] = 5,
 ) -> str:
     """
     Shared helper to execute a text completion call against the Anthropic API using the centralized LLM client.
     """
-    llm = get_llm(model_name=model_name, temperature=temperature)
+    llm = get_llm(model_name=model_name, temperature=temperature, max_tokens=max_tokens, max_retries=max_retries)
     messages = []
     if system_prompt:
         messages.append(("system", system_prompt))

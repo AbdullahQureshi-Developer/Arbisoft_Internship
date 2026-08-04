@@ -1,6 +1,5 @@
 import os
 import logging
-import base64
 from typing import Any, Dict
 import httpx
 from dotenv import load_dotenv
@@ -94,59 +93,6 @@ def get_pr(repo: str, pr_number: int) -> Dict[str, Any]:
         logger.error(f"Local git fallback failed: {local_err}")
 
     raise RuntimeError(f"Could not fetch PR #{pr_number} from GitHub API (404/Permissions) or local git repo.")
-
-
-@log_call
-def get_file_content(repo: str, file_path: str, ref: str = "main") -> Dict[str, Any]:
-    """
-    Fetches the content of a specific file in a GitHub repository via contents endpoint.
-    GET /repos/{owner}/{repo}/contents/{path}?ref={ref}
-    """
-    token = os.getenv("GITHUB_TOKEN", GITHUB_TOKEN)
-    headers = _get_headers(as_diff=False)
-    if token:
-        headers["Authorization"] = f"token {token}"
-
-    url = f"https://api.github.com/repos/{repo}/contents/{file_path}?ref={ref}"
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.get(url, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, dict) and "content" in data:
-                    content = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
-                    return {
-                        "repo": repo,
-                        "file_path": file_path,
-                        "content": content,
-                        "html_url": data.get("html_url", f"https://github.com/{repo}/blob/{ref}/{file_path}"),
-                    }
-    except Exception as e:
-        logger.warning(f"GitHub API file fetch failed for {repo}/{file_path} ({e}), attempting local fallback...")
-
-    # Local file fallback
-    try:
-        workspace_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        parent_dir = os.path.dirname(workspace_dir)
-        possible_paths = [
-            os.path.join(workspace_dir, file_path),
-            os.path.join(parent_dir, file_path),
-            os.path.join(parent_dir, repo, file_path),
-        ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                clean_path = path.replace("\\", "/")
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    return {
-                        "repo": repo,
-                        "file_path": file_path,
-                        "content": f.read(),
-                        "html_url": f"file:///{clean_path}",
-                    }
-    except Exception as local_err:
-        logger.error(f"Local file fallback failed: {local_err}")
-
-    raise RuntimeError(f"Could not fetch file '{file_path}' from GitHub repo '{repo}' or local workspace.")
 
 
 @log_call
