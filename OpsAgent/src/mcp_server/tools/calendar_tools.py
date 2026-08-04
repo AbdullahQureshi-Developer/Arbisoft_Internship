@@ -32,10 +32,32 @@ def create_event(
 
         service = get_calendar_service()
 
+        # Format start and end dateTime objects with timezone specification for Google Calendar API
+        start_obj = {"dateTime": start_time}
+        end_obj = {"dateTime": end_time}
+
+        if "Z" not in start_time and "+" not in start_time and "-" not in start_time[10:]:
+            import time
+            tz_offset = time.strftime("%z")
+            if tz_offset and len(tz_offset) == 5:
+                formatted_tz = f"{tz_offset[:3]}:{tz_offset[3:]}"
+                start_obj = {"dateTime": f"{start_time}{formatted_tz}"}
+            else:
+                start_obj = {"dateTime": f"{start_time}Z"}
+
+        if "Z" not in end_time and "+" not in end_time and "-" not in end_time[10:]:
+            import time
+            tz_offset = time.strftime("%z")
+            if tz_offset and len(tz_offset) == 5:
+                formatted_tz = f"{tz_offset[:3]}:{tz_offset[3:]}"
+                end_obj = {"dateTime": f"{end_time}{formatted_tz}"}
+            else:
+                end_obj = {"dateTime": f"{end_time}Z"}
+
         event_body = {
             "summary": title,
-            "start": {"dateTime": start_time},
-            "end": {"dateTime": end_time},
+            "start": start_obj,
+            "end": end_obj,
             "attendees": [{"email": email} for email in attendees],
         }
 

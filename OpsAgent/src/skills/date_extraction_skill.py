@@ -51,7 +51,7 @@ def extract_dates_and_updates(text: str, reference_now: Optional[datetime] = Non
     Takes document text and extracts important dates/deadlines and notable updates using Claude structured output.
     """
     if reference_now is None:
-        reference_now = datetime.utcnow()
+        reference_now = datetime.now().astimezone()
 
     llm = get_llm()
 
@@ -61,7 +61,11 @@ def extract_dates_and_updates(text: str, reference_now: Optional[datetime] = Non
         f"You are an assistant analyzing a business or technical document.\n"
         f"Reference Current Time: {reference_now.isoformat()}\n\n"
         f"Document Text:\n\"\"\"\n{text}\n\"\"\"\n\n"
-        f"Extract all explicit or implicit dates, deadlines, and scheduled events with their exact timestamps and descriptions. "
+        f"Extract all explicit or implicit dates, deadlines, and scheduled events with their exact timestamps (ISO YYYY-MM-DDTHH:MM:SS) and descriptions.\n"
+        f"CRITICAL TIME PARSING RULES:\n"
+        f"1. In business meeting notes, if a scheduled event, demo, or meeting is specified as '12:00 AM' or '12 AM', interpret it as 12:00 PM (noon / 12:00:00) unless explicitly stated as midnight.\n"
+        f"2. Do NOT confuse timestamps of past or missed deadlines with upcoming scheduled events.\n"
+        f"3. Maintain relative date calculations accurately against the Reference Current Time.\n"
         f"Also extract any notable decisions, status changes, or scope changes mentioned in the document."
     )
 

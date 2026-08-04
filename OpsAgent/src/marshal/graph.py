@@ -60,6 +60,10 @@ def github_review_step(state: OpsAgentState) -> OpsAgentState:
 
     repo = intent.repo or "owner/repo"
     pr_num = intent.pr_number
+    msg_lower = state["message_text"].lower()
+
+    # Check if user explicitly asked to post/comment on GitHub
+    should_post = any(k in msg_lower for k in ["post", "comment", "publish", "attach"])
 
     # Retry logic (1 retry with backoff)
     diff_res = None
@@ -82,18 +86,30 @@ def github_review_step(state: OpsAgentState) -> OpsAgentState:
     try:
         # Run Review Skill
         review = review_pr_diff(diff_text=diff_res.diff, title=diff_res.title)
+        issues_formatted = "\n".join([f"• {issue}" for issue in review.issues]) or "None"
 
-        # Post comment to GitHub
-        post_res = post_review_comment(PostCommentRequest(repo=repo, pr_number=pr_num, body=review.comment_text))
+        if should_post:
+            # Post comment directly to GitHub
+            post_res = post_review_comment(PostCommentRequest(repo=repo, pr_number=pr_num, body=review.comment_text))
 
-        state["result_text"] = (
-            f"✅ **GitHub Review Posted** for PR #{pr_num} ({repo})\n\n"
-            f"**Summary**: {review.summary}\n\n"
-            f"**Issues Identified**: {len(review.issues)}\n"
-            f"🔗 [View Comment on GitHub]({post_res.html_url or diff_res.html_url})"
-        )
+            state["result_text"] = (
+                f"✅ **GitHub Review Posted** for PR #{pr_num} ({repo})\n\n"
+                f"**Summary**: {review.summary}\n\n"
+                f"**Issues Identified** ({len(review.issues)}):\n{issues_formatted}\n\n"
+                f"🔗 [View Comment on GitHub]({post_res.html_url or diff_res.html_url})"
+            )
+        else:
+            # Option B: Display review in Slack first and offer to post
+            state["result_text"] = (
+                f"🔍 **GitHub PR Review Complete** for PR #{pr_num} ({repo})\n\n"
+                f"**Summary**:\n{review.summary}\n\n"
+                f"**Issues Identified** ({len(review.issues)}):\n{issues_formatted}\n\n"
+                f"**Detailed Review Comment**:\n{review.comment_text}\n\n"
+                f"💡 **Post to GitHub Offer**: Would you like to post this review as an official comment on PR #{pr_num}? "
+                f"Reply with `post to PR #{pr_num}`."
+            )
     except Exception as e:
-        state["result_text"] = f"⚠️ Analyzed PR #{pr_num}, but failed to post review comment: {e}"
+        state["result_text"] = f"⚠️ Analyzed PR #{pr_num}, but encountered an error: {e}"
         state["error"] = str(e)
 
     return state

@@ -29,8 +29,8 @@ def classify_intent(message_text: str) -> WorkflowIntent:
             notes_text=message_text,
         )
 
-    # 2. Regex fast-path for PR review ("review PR #123" or "review octocat/Hello-World #123")
-    pr_match = re.search(r"review\s+(?:PR\s*)?(?:#|pr)?\s*([\w\-]+/[\w\-]+)?\s*#?(\d+)", message_text, re.IGNORECASE)
+    # 2. Regex fast-path for PR review ("review PR #123", "post review to PR #123", "comment on PR #123")
+    pr_match = re.search(r"(?:review|post\s+(?:review\s+)?to|comment\s+on)\s+(?:PR\s*)?(?:#|pr)?\s*([\w\-]+/[\w\-]+)?\s*#?(\d+)", message_text, re.IGNORECASE)
     if pr_match:
         repo = pr_match.group(1) or os.getenv("DEFAULT_GITHUB_REPO", "owner/repo")
         pr_num = int(pr_match.group(2))

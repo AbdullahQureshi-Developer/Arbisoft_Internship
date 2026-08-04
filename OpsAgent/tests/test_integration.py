@@ -57,9 +57,18 @@ def test_integration_github_flow(monkeypatch):
         user_id="U12345",
     )
 
-    assert "GitHub Review Posted" in response
+    assert "GitHub PR Review Complete" in response
     assert "PR #123" in response
     assert "Added feature X cleanly" in response
+
+    response_post = process_slack_message(
+        message_text="post review to PR #123",
+        channel_id="C12345",
+        user_id="U12345",
+    )
+
+    assert "GitHub Review Posted" in response_post
+    assert "PR #123" in response_post
 
 
 def test_integration_task_reminder_flow(monkeypatch):
