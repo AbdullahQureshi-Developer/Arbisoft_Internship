@@ -25,4 +25,4 @@ token.json
 src/integrations/google/credentials.json
 src/integrations/google/token.json
 
-.agents/tmp/
+.agents/
