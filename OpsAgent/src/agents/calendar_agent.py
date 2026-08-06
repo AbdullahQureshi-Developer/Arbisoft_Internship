@@ -8,7 +8,12 @@ class CreateEventRequest(BaseModel):
     title: str = Field(..., description="Title or summary of the calendar event")
     start_time: str = Field(..., description="ISO 8601 formatted start datetime")
     end_time: str = Field(..., description="ISO 8601 formatted end datetime")
-    attendees: List[str] = Field(default_factory=list, description="List of attendee email addresses or names")
+    attendees: List[str] = Field(
+        default_factory=list, description="List of attendee email addresses or names"
+    )
+    user_id: Optional[str] = Field(
+        None, description="Optional Slack user ID to scope OAuth token"
+    )
 
 
 class CreateEventResult(BaseModel):
@@ -32,5 +37,6 @@ def schedule_calendar_event(request: CreateEventRequest) -> CreateEventResult:
         start_time=request.start_time,
         end_time=request.end_time,
         attendees=request.attendees,
+        user_id=request.user_id,
     )
     return CreateEventResult(**raw_res)

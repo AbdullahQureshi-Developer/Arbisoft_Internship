@@ -3,10 +3,17 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Generator, List, Optional
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, select, text, event
 from sqlalchemy.orm import Session, sessionmaker
 
-from src.memory.models import ActionsLog, Base, ConversationHistory, Reminder, Task
+from src.memory.models import (
+    ActionsLog,
+    Base,
+    ConversationHistory,
+    Reminder,
+    Task,
+    UserGoogleToken,
+)
 
 load_dotenv()
 
@@ -14,11 +21,25 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///opsagent.db")
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    connect_args={"check_same_thread": False}
+    if DATABASE_URL.startswith("sqlite")
+    else {},
     echo=False,
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
+if DATABASE_URL.startswith("sqlite"):
+
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
+
+SessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, expire_on_commit=False, bind=engine
+)
 
 
 def init_db() -> None:
@@ -27,17 +48,40 @@ def init_db() -> None:
     with engine.connect() as conn:
         if DATABASE_URL.startswith("sqlite"):
             # Migration for tasks table
-            task_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(tasks)")).fetchall()]
+            task_cols = [
+                row[1]
+                for row in conn.execute(text("PRAGMA table_info(tasks)")).fetchall()
+            ]
             if "user_id" not in task_cols:
-                conn.execute(text("ALTER TABLE tasks ADD COLUMN user_id TEXT NOT NULL DEFAULT 'U0BKEANUVP1'"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE tasks ADD COLUMN user_id TEXT NOT NULL DEFAULT 'unassigned'"
+                    )
+                )
             # Migration for reminders table
-            rem_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(reminders)")).fetchall()]
+            rem_cols = [
+                row[1]
+                for row in conn.execute(text("PRAGMA table_info(reminders)")).fetchall()
+            ]
             if "user_id" not in rem_cols:
-                conn.execute(text("ALTER TABLE reminders ADD COLUMN user_id TEXT NOT NULL DEFAULT 'U0BKEANUVP1'"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE reminders ADD COLUMN user_id TEXT NOT NULL DEFAULT 'unassigned'"
+                    )
+                )
             # Migration for actions_log table
-            actions_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(actions_log)")).fetchall()]
+            actions_cols = [
+                row[1]
+                for row in conn.execute(
+                    text("PRAGMA table_info(actions_log)")
+                ).fetchall()
+            ]
             if "user_id" not in actions_cols:
-                conn.execute(text("ALTER TABLE actions_log ADD COLUMN user_id TEXT DEFAULT 'U0BKEANUVP1'"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE actions_log ADD COLUMN user_id TEXT DEFAULT 'unassigned'"
+                    )
+                )
             conn.commit()
 
 
@@ -55,10 +99,20 @@ def get_db() -> Generator[Session, None, None]:
         session.close()
 
 
-def create_task(user_id: str, description: str, assignee: Optional[str] = None, due_hint: Optional[str] = None) -> Task:
+def create_task(
+    user_id: str,
+    description: str,
+    assignee: Optional[str] = None,
+    due_hint: Optional[str] = None,
+) -> Task:
     """Create a new task in memory scoped to user_id."""
     with get_db() as db:
-        task = Task(user_id=user_id, description=description, assignee=assignee, due_hint=due_hint)
+        task = Task(
+            user_id=user_id,
+            description=description,
+            assignee=assignee,
+            due_hint=due_hint,
+        )
         db.add(task)
         db.flush()
         db.refresh(task)
@@ -96,14 +150,15 @@ def create_reminder(
         return reminder
 
 
-def get_pending_reminders(user_id: Optional[str] = None, now: Optional[datetime] = None) -> List[Reminder]:
+def get_pending_reminders(
+    user_id: Optional[str] = None, now: Optional[datetime] = None
+) -> List[Reminder]:
     """Get all reminders scheduled to fire on or before `now` that haven't been delivered, optionally scoped by user_id."""
     if now is None:
         now = datetime.utcnow()
     with get_db() as db:
         stmt = select(Reminder).where(
-            Reminder.fire_at <= now,
-            Reminder.delivered == False
+            Reminder.fire_at <= now, Reminder.delivered.is_(False)
         )
         if user_id:
             stmt = stmt.where(Reminder.user_id == user_id)
@@ -121,7 +176,14 @@ def mark_reminder_delivered(reminder_id: int, user_id: Optional[str] = None) -> 
             reminder.delivered = True
 
 
-def log_action(func_name: str, inputs: str, outputs: str, status: str, latency_ms: float, user_id: Optional[str] = None) -> ActionsLog:
+def log_action(
+    func_name: str,
+    inputs: str,
+    outputs: str,
+    status: str,
+    latency_ms: float,
+    user_id: Optional[str] = None,
+) -> ActionsLog:
     """Write an entry into actions_log."""
     with get_db() as db:
         log_entry = ActionsLog(
@@ -138,23 +200,56 @@ def log_action(func_name: str, inputs: str, outputs: str, status: str, latency_m
         return log_entry
 
 
-def record_channel_message(channel_id: str, user_id: str, role: str, message: str) -> ConversationHistory:
+def record_channel_message(
+    channel_id: str, user_id: str, role: str, message: str
+) -> ConversationHistory:
     """Record message into conversation history keyed on (channel_id, user_id)."""
     with get_db() as db:
-        entry = ConversationHistory(channel_id=channel_id, user_id=user_id, role=role, message=message)
+        entry = ConversationHistory(
+            channel_id=channel_id, user_id=user_id, role=role, message=message
+        )
         db.add(entry)
         db.flush()
         db.refresh(entry)
         return entry
 
 
-def get_channel_history(channel_id: str, user_id: str, limit: int = 10) -> List[ConversationHistory]:
+def get_channel_history(
+    channel_id: str, user_id: str, limit: int = 10
+) -> List[ConversationHistory]:
     """Retrieve history strictly keyed on (channel_id, user_id)."""
     with get_db() as db:
         stmt = (
             select(ConversationHistory)
-            .where(ConversationHistory.channel_id == channel_id, ConversationHistory.user_id == user_id)
+            .where(
+                ConversationHistory.channel_id == channel_id,
+                ConversationHistory.user_id == user_id,
+            )
             .order_by(ConversationHistory.timestamp.desc())
             .limit(limit)
         )
         return list(reversed(db.scalars(stmt).all()))
+
+
+def save_user_google_token(user_id: str, token_json: str) -> UserGoogleToken:
+    """Save or update a per-user Google OAuth token in SQLite."""
+    with get_db() as db:
+        stmt = select(UserGoogleToken).where(UserGoogleToken.user_id == user_id)
+        token_entry = db.scalars(stmt).first()
+        if token_entry:
+            token_entry.token_json = token_json
+            token_entry.updated_at = datetime.utcnow()
+        else:
+            token_entry = UserGoogleToken(user_id=user_id, token_json=token_json)
+            db.add(token_entry)
+        db.flush()
+        db.refresh(token_entry)
+        return token_entry
+
+
+def get_user_google_token(user_id: str) -> Optional[str]:
+    """Retrieve a stored per-user Google OAuth token string from SQLite."""
+    with get_db() as db:
+        stmt = select(UserGoogleToken).where(UserGoogleToken.user_id == user_id)
+        token_entry = db.scalars(stmt).first()
+        return token_entry.token_json if token_entry else None

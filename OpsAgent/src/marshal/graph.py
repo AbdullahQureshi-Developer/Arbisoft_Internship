@@ -1,30 +1,31 @@
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
-from typing import TypedDict, Optional, List, Dict, Any
+from datetime import datetime, timedelta, timezone
+from typing import TypedDict, Optional, List, Any
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel, ValidationError
-
-load_dotenv()
-
+from pydantic import ValidationError
 
 from src.hooks.logging_hook import log_call
 from src.marshal.router import classify_intent, WorkflowIntent
 from src.agents.github_agent import (
-    fetch_pr_diff, post_review_comment,
-    FetchPRRequest, PostCommentRequest
+    fetch_pr_diff,
+    post_review_comment,
+    FetchPRRequest,
+    PostCommentRequest,
 )
 from src.skills.review_skill import review_pr_diff
 from src.skills.summarization_skill import summarize_text
 from src.skills.task_extraction_skill import extract_tasks_and_reminders
 from src.skills.date_extraction_skill import extract_dates_and_updates
 from src.skills.document_parser import parse_document
-from src.agents.todo_agent import save_extracted_tasks
+from src.agents.todo_agent import save_extracted_tasks, SaveTasksRequest
 from src.agents.reminder_agent import schedule_new_reminder, ScheduleReminderRequest
 from src.skills.event_extraction_skill import extract_event_details
 from src.agents.calendar_agent import schedule_calendar_event, CreateEventRequest
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,58 @@ class OpsAgentState(TypedDict):
     intent: Optional[WorkflowIntent]
     result_text: str
     error: Optional[str]
+
+
+def _format_task_list(tasks: List[Any]) -> str:
+    """Formats a list of extracted/saved tasks into bullet points."""
+    return (
+        "\n".join(
+            [
+                f"• {getattr(t, 'description', str(t))} (Assignee: {getattr(t, 'assignee', 'Unassigned') or 'Unassigned'})"
+                for t in tasks
+            ]
+        )
+        or "None"
+    )
+
+
+def _resolve_working_text(state: OpsAgentState) -> str:
+    """Extracts working text from state intent notes_text or message_text, retrieving channel history if query is short."""
+    intent = state.get("intent")
+    if intent and intent.notes_text:
+        return intent.notes_text
+
+    msg_text = state.get("message_text", "")
+    msg_lower = msg_text.lower()
+
+    # If the user message is a short follow-up query referencing previous notes/tasks
+    if len(msg_text.strip().split()) < 15 and any(
+        kw in msg_lower
+        for kw in ["action item", "meeting notes", "summarize", "task", "notes"]
+    ):
+        try:
+            from src.memory.store import get_channel_history
+
+            channel_id = state.get("channel_id", "")
+            user_id = state.get("user_id", "")
+            if channel_id and user_id:
+                history = get_channel_history(
+                    channel_id=channel_id, user_id=user_id, limit=5
+                )
+                past_msgs = [
+                    h.message
+                    for h in history
+                    if h.message != msg_text and len(h.message) > 20
+                ]
+                if past_msgs:
+                    return (
+                        f"{msg_text}\n\nContext from Previous Channel Messages:\n"
+                        + "\n---\n".join(past_msgs)
+                    )
+        except Exception as e:
+            logger.warning(f"Could not retrieve channel history context: {e}")
+
+    return msg_text
 
 
 @log_call
@@ -58,7 +111,13 @@ def github_review_step(state: OpsAgentState) -> OpsAgentState:
         state["result_text"] = "⚠️ Could not identify PR number from your request."
         return state
 
-    repo = intent.repo or "owner/repo"
+    if not intent.repo:
+        state["result_text"] = (
+            "⚠️ Please specify the GitHub repository in 'owner/repo' format."
+        )
+        return state
+
+    repo = intent.repo
     pr_num = intent.pr_number
     msg_lower = state["message_text"].lower()
 
@@ -78,7 +137,7 @@ def github_review_step(state: OpsAgentState) -> OpsAgentState:
 
     if not diff_res:
         err_msg = f"❌ Failed to fetch PR #{pr_num} from GitHub ({repo}): {last_err}"
-        logger.error(err_msg)
+        logger.exception(err_msg)
         state["result_text"] = err_msg
         state["error"] = str(last_err)
         return state
@@ -86,21 +145,29 @@ def github_review_step(state: OpsAgentState) -> OpsAgentState:
     try:
         # Run Review Skill
         review = review_pr_diff(diff_text=diff_res.diff, title=diff_res.title)
-        issues_formatted = "\n".join([f"• {issue}" for issue in review.issues]) or "None"
+        issues_formatted = (
+            "\n".join([f"• {issue}" for issue in review.issues]) or "None"
+        )
 
         if should_post:
             # Post comment directly to GitHub
-            post_res = post_review_comment(PostCommentRequest(repo=repo, pr_number=pr_num, body=review.comment_text))
+            post_res = post_review_comment(
+                PostCommentRequest(
+                    repo=repo, pr_number=pr_num, body=review.comment_text
+                )
+            )
 
             state["result_text"] = (
+                f"I've published your review comment directly to GitHub PR #{pr_num}! 🚀\n\n"
                 f"✅ **GitHub Review Posted** for PR #{pr_num} ({repo})\n\n"
                 f"**Summary**: {review.summary}\n\n"
                 f"**Issues Identified** ({len(review.issues)}):\n{issues_formatted}\n\n"
                 f"🔗 [View Comment on GitHub]({post_res.html_url or diff_res.html_url})"
             )
         else:
-            # Option B: Display review in Slack first and offer to post
+            # Display review in Slack first and offer to post
             state["result_text"] = (
+                f"I've completed the code review for PR #{pr_num}! Here is the breakdown: 🔍\n\n"
                 f"🔍 **GitHub PR Review Complete** for PR #{pr_num} ({repo})\n\n"
                 f"**Summary**:\n{review.summary}\n\n"
                 f"**Issues Identified** ({len(review.issues)}):\n{issues_formatted}\n\n"
@@ -115,10 +182,9 @@ def github_review_step(state: OpsAgentState) -> OpsAgentState:
     return state
 
 
-
 @log_call
 def task_reminder_step(state: OpsAgentState) -> OpsAgentState:
-    text = state.get("intent").notes_text or state["message_text"] if state.get("intent") else state["message_text"]
+    text = _resolve_working_text(state)
 
     try:
         # 1. Summarize
@@ -128,7 +194,9 @@ def task_reminder_step(state: OpsAgentState) -> OpsAgentState:
         extraction_res = extract_tasks_and_reminders(text)
 
         # 3. Save Tasks scoped to user_id
-        save_res = save_extracted_tasks(extraction_res.tasks, user_id=state["user_id"])
+        save_res = save_extracted_tasks(
+            SaveTasksRequest(tasks=extraction_res.tasks, user_id=state["user_id"])
+        )
 
         # 4. Schedule Reminders
         scheduled_reminders = []
@@ -140,22 +208,47 @@ def task_reminder_step(state: OpsAgentState) -> OpsAgentState:
                         user_id=state["user_id"],
                         message=task.description,
                         delay_seconds=task.reminder_delay_seconds,
-                        task_id=save_res.saved_tasks[0].task_id if save_res.saved_tasks else None,
+                        task_id=save_res.saved_tasks[0].task_id
+                        if save_res.saved_tasks
+                        else None,
                     )
                 )
                 scheduled_reminders.append(rem_res)
 
-        tasks_formatted = "\n".join([f"• {t.description} (Assignee: {t.assignee or 'Unassigned'})" for t in save_res.saved_tasks]) or "None"
-        reminders_formatted = f"{len(scheduled_reminders)} reminder(s) scheduled." if scheduled_reminders else "No explicit reminder time requested."
-
-        state["result_text"] = (
-            f"📝 **Summary & Task Extraction Complete**\n\n"
-            f"**Summary**:\n{summary_res.summary}\n\n"
-            f"**Extracted Tasks ({len(save_res.saved_tasks)})**:\n{tasks_formatted}\n\n"
-            f"⏰ **Reminders**: {reminders_formatted}"
+        tasks_formatted = _format_task_list(save_res.saved_tasks)
+        reminders_formatted = (
+            f"{len(scheduled_reminders)} reminder(s) scheduled."
+            if scheduled_reminders
+            else "No explicit reminder time requested."
         )
+
+        if not save_res.saved_tasks and not scheduled_reminders:
+            from src.memory.store import get_tasks
+
+            existing_tasks = get_tasks(user_id=state["user_id"])
+            if existing_tasks:
+                existing_formatted = _format_task_list(existing_tasks)
+                state["result_text"] = (
+                    f"Here are your saved action items from your meeting notes memory: 📋\n\n"
+                    f"📋 **Saved Action Items ({len(existing_tasks)})**:\n{existing_formatted}"
+                )
+            else:
+                state["result_text"] = (
+                    f"I reviewed the query, but didn't find any new actionable tasks or reminders to schedule. 📝\n\n"
+                    f"**Summary**:\n{summary_res.summary}\n\n"
+                    f"**Extracted Tasks (0)**:\nNone\n\n"
+                    f"⏰ **Reminders**: {reminders_formatted}"
+                )
+        else:
+            state["result_text"] = (
+                f"Got it! I've summarized your notes, saved the extracted tasks, and set up your reminders. 📝\n\n"
+                f"📝 **Summary & Task Extraction Complete**\n\n"
+                f"**Summary**:\n{summary_res.summary}\n\n"
+                f"**Extracted Tasks ({len(save_res.saved_tasks)})**:\n{tasks_formatted}\n\n"
+                f"⏰ **Reminders**: {reminders_formatted}"
+            )
     except Exception as e:
-        logger.error(f"Error in task & reminder step: {e}")
+        logger.exception(f"Error in task & reminder step: {e}")
         state["result_text"] = f"❌ Error processing notes/tasks: {e}"
         state["error"] = str(e)
 
@@ -164,7 +257,7 @@ def task_reminder_step(state: OpsAgentState) -> OpsAgentState:
 
 @log_call
 def calendar_schedule_step(state: OpsAgentState) -> OpsAgentState:
-    text = state.get("intent").notes_text or state["message_text"] if state.get("intent") else state["message_text"]
+    text = _resolve_working_text(state)
 
     try:
         # 1. Extract event details via Skill
@@ -180,12 +273,29 @@ def calendar_schedule_step(state: OpsAgentState) -> OpsAgentState:
                 start_time=start_iso,
                 end_time=end_iso,
                 attendees=extracted_event.attendees,
+                user_id=state["user_id"],
             )
         )
 
-        attendees_str = ", ".join(event_res.attendees) if event_res.attendees else "None"
+        if (
+            event_res.status == "auth_required"
+            or getattr(event_res, "note", None) == "auth_required"
+        ):
+            auth_url = f"http://localhost:8000/auth/google?user_id={state['user_id']}"
+            state["result_text"] = (
+                f"🔒 **Google Calendar Authentication Required**\n\n"
+                f"You haven't connected your Google Calendar account yet!\n\n"
+                f"👉 [Click Here to Connect Google Calendar]({auth_url})\n\n"
+                f"Once connected, ask me again and I'll schedule **{extracted_event.title}** on your calendar! 📅"
+            )
+            return state
+
+        attendees_str = (
+            ", ".join(event_res.attendees) if event_res.attendees else "None"
+        )
 
         state["result_text"] = (
+            f"Sure thing! I've scheduled your event on Google Calendar. 📅\n\n"
             f"📅 **Calendar Event Scheduled**\n\n"
             f"**Title**: {event_res.title}\n"
             f"**Start Time**: {event_res.start_time}\n"
@@ -194,7 +304,7 @@ def calendar_schedule_step(state: OpsAgentState) -> OpsAgentState:
             f"🔗 [View Calendar Event]({event_res.html_url})"
         )
     except Exception as e:
-        logger.error(f"Error in calendar schedule step: {e}")
+        logger.exception(f"Error in calendar schedule step: {e}")
         state["result_text"] = f"❌ Error scheduling calendar event: {e}"
         state["error"] = str(e)
 
@@ -214,7 +324,18 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
         else:
             doc_text = state["message_text"]
 
-        combined_text = f"{state['message_text']}\n\nDocument Content:\n{doc_text}".strip()
+        from src.memory.store import record_channel_message
+
+        record_channel_message(
+            channel_id=channel_id,
+            user_id=user_id,
+            role="assistant",
+            message=f"Document Content (`{file_name}`):\n{doc_text[:1000]}",
+        )
+
+        combined_text = (
+            f"{state['message_text']}\n\nDocument Content:\n{doc_text}".strip()
+        )
 
         now = datetime.utcnow()
 
@@ -222,28 +343,38 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
         with ThreadPoolExecutor() as executor:
             future_summary = executor.submit(summarize_text, combined_text)
             future_tasks = executor.submit(extract_tasks_and_reminders, combined_text)
-            future_dates = executor.submit(lambda: extract_dates_and_updates(combined_text, reference_now=now))
+            future_dates = executor.submit(
+                lambda: extract_dates_and_updates(combined_text, reference_now=now)
+            )
 
             summary_res = future_summary.result()
             task_res = future_tasks.result()
             dates_and_updates = future_dates.result()
 
-        save_res = save_extracted_tasks(task_res.tasks, user_id=user_id)
+        save_res = save_extracted_tasks(
+            SaveTasksRequest(tasks=task_res.tasks, user_id=user_id)
+        )
 
         routed_dates_info = []
         for date_item in dates_and_updates.dates:
             dt = date_item.date
             desc = date_item.description
-            
-            dt_naive = dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+            dt_naive = (
+                dt.astimezone(timezone.utc).replace(tzinfo=None)
+                if dt.tzinfo is not None
+                else dt
+            )
             time_until = dt_naive - now
             total_seconds = time_until.total_seconds()
 
             if total_seconds < 0:
-                routed_dates_info.append(f"• ⚠️ **{desc}** ({dt.strftime('%Y-%m-%d %H:%M')}) — *already past — not scheduled*")
+                routed_dates_info.append(
+                    f"• ⚠️ **{desc}** ({dt.strftime('%Y-%m-%d %H:%M')}) — *already past — not scheduled*"
+                )
             elif total_seconds <= 4 * 3600:
                 delay_sec = max(5, int(total_seconds))
-                rem_res = schedule_new_reminder(
+                schedule_new_reminder(
                     ScheduleReminderRequest(
                         channel_id=channel_id,
                         user_id=user_id,
@@ -251,7 +382,9 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
                         delay_seconds=delay_sec,
                     )
                 )
-                routed_dates_info.append(f"• ⏰ **{desc}** ({dt.strftime('%Y-%m-%d %H:%M')}) — *Internal Reminder Scheduled*")
+                routed_dates_info.append(
+                    f"• ⏰ **{desc}** ({dt.strftime('%Y-%m-%d %H:%M')}) — *Internal Reminder Scheduled*"
+                )
             else:
                 start_iso = dt.isoformat()
                 end_iso = (dt + timedelta(minutes=30)).isoformat()
@@ -261,16 +394,26 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
                         start_time=start_iso,
                         end_time=end_iso,
                         attendees=[],
+                        user_id=user_id,
                     )
                 )
-                link_str = f" [View Calendar Event]({cal_res.html_url})" if cal_res.html_url else ""
-                routed_dates_info.append(f"• 📅 **{desc}** ({dt.strftime('%Y-%m-%d %H:%M')}) — *Google Calendar Event Scheduled*{link_str}")
+                link_str = (
+                    f" [View Calendar Event]({cal_res.html_url})"
+                    if cal_res.html_url
+                    else ""
+                )
+                routed_dates_info.append(
+                    f"• 📅 **{desc}** ({dt.strftime('%Y-%m-%d %H:%M')}) — *Google Calendar Event Scheduled*{link_str}"
+                )
 
-        tasks_formatted = "\n".join([f"• {t.description} (Assignee: {t.assignee or 'Unassigned'})" for t in save_res.saved_tasks]) or "None"
+        tasks_formatted = _format_task_list(save_res.saved_tasks)
         dates_formatted = "\n".join(routed_dates_info) or "No dates found."
-        updates_formatted = "\n".join([f"• {u}" for u in dates_and_updates.updates]) or "None"
+        updates_formatted = (
+            "\n".join([f"• {u}" for u in dates_and_updates.updates]) or "None"
+        )
 
         state["result_text"] = (
+            f"I've processed your uploaded document (`{file_name}`). Here is the summary and extracted items: 📄\n\n"
             f"📄 **Document Processing Complete** (`{file_name}`)\n\n"
             f"**Summary**:\n{summary_res.summary}\n\n"
             f"📋 **Extracted Tasks ({len(save_res.saved_tasks)})**:\n{tasks_formatted}\n\n"
@@ -284,7 +427,9 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
             f"Validation errors detail: {ve.errors()}\n"
             f"Raw/Failed input values: {raw_inputs}"
         )
-        state["result_text"] = f"❌ Error processing document `{file_name}`: Model output failed schema validation ({ve.error_count()} validation error(s): {ve})"
+        state["result_text"] = (
+            f"❌ Error processing document `{file_name}`: Model output failed schema validation ({ve.error_count()} validation error(s): {ve})"
+        )
         state["error"] = str(ve)
     except Exception as e:
         logger.error(f"Error processing document `{file_name}`: {e}")
@@ -296,14 +441,41 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
 
 @log_call
 def unknown_step(state: OpsAgentState) -> OpsAgentState:
-    state["result_text"] = (
-        "🤖 **OpsAgent Assistant**\n"
-        "I can help you with:\n"
-        "1. **GitHub PR Reviews**: Say `review PR #123` or `can you check PR 123`.\n"
-        "2. **Tasks & Reminders**: Paste meeting notes and say `summarize these, extract tasks, and remind me tomorrow to follow up`.\n"
-        "3. **Calendar Scheduling**: Say `schedule a meeting with John tomorrow at 3pm`.\n"
-        "4. **Document Upload**: Attach a PDF or DOCX file for rich extraction & date routing."
-    )
+    text = _resolve_working_text(state)
+
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from src.llm_client import get_llm
+
+        llm = get_llm()
+        system_prompt = (
+            "You are Marshal, a friendly and helpful AI assistant in Slack. "
+            "Respond naturally, warmly, and concisely to user messages like greetings, thanks, acknowledgments, or general chat. "
+            "Keep your response direct, friendly, and short (1-2 sentences). Do not use rigid bullet point lists unless specifically asked."
+        )
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=text),
+        ]
+        response = llm.invoke(messages)
+        res_content = response.content
+        if isinstance(res_content, list):
+            res_content = "".join(
+                [
+                    part.get("text", "") if isinstance(part, dict) else str(part)
+                    for part in res_content
+                ]
+            )
+        elif not isinstance(res_content, str):
+            res_content = str(res_content)
+
+        state["result_text"] = res_content
+    except Exception as e:
+        logger.error(f"Error in unknown conversational step: {e}")
+        state["result_text"] = (
+            "You're very welcome! Let me know if you need any help with PR reviews, tasks, or calendar scheduling. 😊"
+        )
+
     return state
 
 
@@ -366,7 +538,9 @@ def process_slack_message(
     """
     from src.memory.store import record_channel_message
 
-    record_channel_message(channel_id=channel_id, user_id=user_id, role="user", message=message_text)
+    record_channel_message(
+        channel_id=channel_id, user_id=user_id, role="user", message=message_text
+    )
 
     initial_state: OpsAgentState = {
         "message_text": message_text,
@@ -379,10 +553,15 @@ def process_slack_message(
         "result_text": "",
         "error": None,
     }
-    
+
     final_state = ops_graph.invoke(initial_state)
 
     if final_state.get("result_text"):
-        record_channel_message(channel_id=channel_id, user_id=user_id, role="assistant", message=final_state["result_text"])
+        record_channel_message(
+            channel_id=channel_id,
+            user_id=user_id,
+            role="assistant",
+            message=final_state["result_text"],
+        )
 
     return final_state["result_text"]

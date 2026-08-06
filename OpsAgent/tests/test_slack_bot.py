@@ -2,24 +2,29 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from src.slack.bot import handle_slack_message, download_slack_file
-from src.marshal.graph import document_processing_step, process_slack_message
+from src.marshal.graph import document_processing_step
 
 
-def test_handle_slack_message():
+def test_handle_slack_message(monkeypatch):
+    monkeypatch.setattr(
+        "src.slack.bot.process_slack_message",
+        lambda **kwargs: "🤖 **OpsAgent Assistant**\nHello! How can I help you today?",
+    )
+
     mock_event = {
         "text": "Hello bot",
         "user": "U123456",
         "ts": "1600000000.000100",
         "channel_type": "im",
     }
-    
+
     replies = []
-    
+
     def dummy_say(text: str, thread_ts: str = None):
         replies.append({"text": text, "thread_ts": thread_ts})
-        
+
     res = handle_slack_message(event=mock_event, say=dummy_say)
-    
+
     assert "OpsAgent Assistant" in res
     assert len(replies) == 1
     assert "OpsAgent Assistant" in replies[0]["text"]
@@ -38,7 +43,9 @@ def test_download_slack_file_success(monkeypatch):
 
 def test_download_slack_file_http_error(monkeypatch):
     mock_resp = MagicMock()
-    mock_resp.raise_for_status.side_effect = requests.HTTPError("403 Client Error: Forbidden")
+    mock_resp.raise_for_status.side_effect = requests.HTTPError(
+        "403 Client Error: Forbidden"
+    )
     monkeypatch.setattr(requests, "get", lambda *args, **kwargs: mock_resp)
 
     with pytest.raises(requests.HTTPError):
@@ -66,4 +73,3 @@ def test_document_processing_step_failed_or_empty_download():
     result_state = document_processing_step(state_empty)
     assert "❌ Error processing document `sample.docx`" in result_state["result_text"]
     assert "Processing Complete" not in result_state["result_text"]
-
