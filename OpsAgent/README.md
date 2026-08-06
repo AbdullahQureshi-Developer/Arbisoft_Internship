@@ -51,6 +51,36 @@ To run the Slack Bot in Socket Mode:
 uv run python -m src.slack.bot
 ```
 
+## Docker Containerization
+
+OpsAgent is fully containerized with **Docker**, **`uv`**, and **Docker Compose**.
+
+### Running with Docker Compose
+
+1. **Build and start services in background**:
+   ```bash
+   docker compose build
+   docker compose up -d
+   ```
+
+2. **Check container logs**:
+   ```bash
+   docker compose logs -f
+   ```
+
+3. **Check container health & status**:
+   ```bash
+   docker compose ps
+   curl http://localhost:8000/health
+   ```
+
+4. **Stop containers**:
+   ```bash
+   docker compose down
+   ```
+
+Both the `api` (FastAPI backend) and `bot` (Slack worker) services run in isolated containers sharing a persistent SQLite volume (`opsagent_sqlite_data`).
+
 ## Development Workflow
 
 This project uses **Superpowers-style skills** via the [agy-superpowers](https://www.npmjs.com/package/agy-superpowers) framework. Skill files live in `.agents/skills/` and are automatically detected by the Antigravity IDE, making them available as slash commands in the TUI.
@@ -96,5 +126,3 @@ LANGSMITH_PROJECT=OpsAgent
 ```
 
 Traces, agent decisions, skill executions, latency, and token consumption are automatically logged and visible at [smith.langchain.com](https://smith.langchain.com) under project **"OpsAgent"**.
-
-
