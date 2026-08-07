@@ -45,3 +45,45 @@ def test_get_pr_api_failure_raises_runtime_error():
             get_pr("owner/repo", 999)
 
         assert "404" in str(exc_info.value)
+
+
+def test_post_pr_comment_success():
+    from src.mcp_server.tools.github_tools import post_pr_comment
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 201
+    mock_resp.json.return_value = {
+        "id": 12345,
+        "html_url": "https://github.com/owner/repo/pull/1#issuecomment-12345",
+    }
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.post.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        res = post_pr_comment("owner/repo", 1, "Looks good!")
+
+        assert res["status"] == "success"
+        assert res["comment_id"] == 12345
+        assert "issuecomment-12345" in res["html_url"]
+
+
+def test_post_pr_comment_failure_raises_runtime_error():
+    from src.mcp_server.tools.github_tools import post_pr_comment
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 403
+    mock_resp.text = "Forbidden"
+
+    with patch("httpx.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.post.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(RuntimeError) as exc_info:
+            post_pr_comment("owner/repo", 1, "Test comment")
+
+        assert "403" in str(exc_info.value)

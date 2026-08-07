@@ -97,14 +97,14 @@ def post_pr_comment(repo: str, pr_number: int, body: str) -> Dict[str, Any]:
                     "html_url": res_data.get("html_url"),
                     "body": body,
                 }
+            else:
+                raise RuntimeError(
+                    f"GitHub API Error {resp.status_code} posting comment on PR #{pr_number}: {resp.text}"
+                )
     except Exception as e:
-        logger.warning(
-            f"GitHub API post comment failed ({e}). Returning local review response."
-        )
-
-    return {
-        "status": "local_success",
-        "comment_id": 0,
-        "html_url": f"https://github.com/{repo}/pull/{pr_number}",
-        "body": body,
-    }
+        logger.error(f"GitHub API post comment failed for {repo} PR #{pr_number}: {e}")
+        if isinstance(e, RuntimeError):
+            raise
+        raise RuntimeError(
+            f"Failed to post PR #{pr_number} comment via GitHub API: {e}"
+        ) from e

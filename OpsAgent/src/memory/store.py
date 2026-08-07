@@ -1,7 +1,10 @@
+import base64
+import hashlib
 import os
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Generator, List, Optional
+from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, select, text, event
 from sqlalchemy.orm import Session, sessionmaker
@@ -231,16 +234,35 @@ def get_channel_history(
         return list(reversed(db.scalars(stmt).all()))
 
 
+_RAW_KEY = os.getenv("TOKEN_ENCRYPTION_KEY", "opsagent-token-encryption-secret-2026")
+_FERNET_KEY = base64.urlsafe_b64encode(
+    hashlib.sha256(_RAW_KEY.encode("utf-8")).digest()
+)
+_FERNET = Fernet(_FERNET_KEY)
+
+
+def _encrypt_token_str(plain_text: str) -> str:
+    return _FERNET.encrypt(plain_text.encode("utf-8")).decode("utf-8")
+
+
+def _decrypt_token_str(cipher_text: str) -> str:
+    try:
+        return _FERNET.decrypt(cipher_text.encode("utf-8")).decode("utf-8")
+    except Exception:
+        return cipher_text
+
+
 def save_user_google_token(user_id: str, token_json: str) -> UserGoogleToken:
-    """Save or update a per-user Google OAuth token in SQLite."""
+    """Save or update an encrypted per-user Google OAuth token in SQLite."""
+    encrypted_token = _encrypt_token_str(token_json)
     with get_db() as db:
         stmt = select(UserGoogleToken).where(UserGoogleToken.user_id == user_id)
         token_entry = db.scalars(stmt).first()
         if token_entry:
-            token_entry.token_json = token_json
+            token_entry.token_json = encrypted_token
             token_entry.updated_at = datetime.utcnow()
         else:
-            token_entry = UserGoogleToken(user_id=user_id, token_json=token_json)
+            token_entry = UserGoogleToken(user_id=user_id, token_json=encrypted_token)
             db.add(token_entry)
         db.flush()
         db.refresh(token_entry)
@@ -248,8 +270,10 @@ def save_user_google_token(user_id: str, token_json: str) -> UserGoogleToken:
 
 
 def get_user_google_token(user_id: str) -> Optional[str]:
-    """Retrieve a stored per-user Google OAuth token string from SQLite."""
+    """Retrieve and decrypt a stored per-user Google OAuth token string from SQLite."""
     with get_db() as db:
         stmt = select(UserGoogleToken).where(UserGoogleToken.user_id == user_id)
         token_entry = db.scalars(stmt).first()
-        return token_entry.token_json if token_entry else None
+        if token_entry and token_entry.token_json:
+            return _decrypt_token_str(token_entry.token_json)
+        return None

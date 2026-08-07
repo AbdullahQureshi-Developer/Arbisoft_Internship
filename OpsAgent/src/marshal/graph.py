@@ -281,7 +281,10 @@ def calendar_schedule_step(state: OpsAgentState) -> OpsAgentState:
             event_res.status == "auth_required"
             or getattr(event_res, "note", None) == "auth_required"
         ):
-            auth_url = f"http://localhost:8000/auth/google?user_id={state['user_id']}"
+            from src.integrations.google.auth import generate_auth_token
+
+            auth_token = generate_auth_token(state["user_id"])
+            auth_url = f"http://localhost:8000/auth/google?token={auth_token}"
             state["result_text"] = (
                 f"🔒 **Google Calendar Authentication Required**\n\n"
                 f"You haven't connected your Google Calendar account yet!\n\n"
@@ -422,7 +425,7 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
         )
     except ValidationError as ve:
         raw_inputs = [err.get("input") for err in ve.errors()]
-        logger.error(
+        logger.exception(
             f"Pydantic ValidationError processing document `{file_name}`: {ve}\n"
             f"Validation errors detail: {ve.errors()}\n"
             f"Raw/Failed input values: {raw_inputs}"
@@ -432,7 +435,7 @@ def document_processing_step(state: OpsAgentState) -> OpsAgentState:
         )
         state["error"] = str(ve)
     except Exception as e:
-        logger.error(f"Error processing document `{file_name}`: {e}")
+        logger.exception(f"Error processing document `{file_name}`: {e}")
         state["result_text"] = f"❌ Error processing document `{file_name}`: {e}"
         state["error"] = str(e)
 
@@ -471,7 +474,7 @@ def unknown_step(state: OpsAgentState) -> OpsAgentState:
 
         state["result_text"] = res_content
     except Exception as e:
-        logger.error(f"Error in unknown conversational step: {e}")
+        logger.exception(f"Error in unknown conversational step: {e}")
         state["result_text"] = (
             "You're very welcome! Let me know if you need any help with PR reviews, tasks, or calendar scheduling. 😊"
         )

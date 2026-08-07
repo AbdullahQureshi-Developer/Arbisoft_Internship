@@ -1,21 +1,57 @@
+import hashlib
+import hmac
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-# Allow HTTP for local OAuth testing
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-
 logger = logging.getLogger(__name__)
 
+SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "opsagent-secret-key-google-oauth-2026")
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 BASE_DIR = Path(__file__).resolve().parent
 CREDENTIALS_PATH = BASE_DIR / "credentials.json"
 TOKEN_PATH = BASE_DIR / "token.json"
+
+
+def generate_auth_token(user_id: str, expires_in: int = 600) -> str:
+    """Mints a short-lived HMAC signed token containing user_id and expiration timestamp."""
+    expires_at = int(time.time()) + expires_in
+    payload = f"{user_id}:{expires_at}"
+    sig = hmac.new(
+        SECRET_KEY.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"{user_id}:{expires_at}:{sig}"
+
+
+def verify_auth_token(token: str) -> Optional[str]:
+    """Verifies HMAC signature and expiration of an auth token, returning user_id if valid."""
+    try:
+        parts = token.split(":")
+        if len(parts) != 3:
+            return None
+        user_id, expires_at_str, sig = parts
+        expires_at = int(expires_at_str)
+        if time.time() > expires_at:
+            logger.warning(f"Auth token for user `{user_id}` has expired.")
+            return None
+
+        expected_payload = f"{user_id}:{expires_at_str}"
+        expected_sig = hmac.new(
+            SECRET_KEY.encode("utf-8"), expected_payload.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        if hmac.compare_digest(sig, expected_sig):
+            return user_id
+        logger.warning(f"Invalid HMAC signature on auth token for user `{user_id}`.")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to verify auth token: {e}")
+        return None
 
 
 def get_google_credentials() -> Any:

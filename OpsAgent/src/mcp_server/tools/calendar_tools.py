@@ -6,13 +6,16 @@ from src.hooks.logging_hook import log_call
 logger = logging.getLogger(__name__)
 
 
-def _ensure_offset(dt_str: str) -> str:
+def _ensure_offset(dt_str: str, user_tz: Optional[str] = None) -> str:
     """
     Ensures an ISO 8601 datetime string has an explicit timezone offset.
-    If no offset (Z, +, or - after position 10) is specified, appends local timezone offset.
+    If no offset (Z, +, or - after position 10) is specified, appends user_tz or local timezone offset.
     """
     if "Z" not in dt_str and "+" not in dt_str and "-" not in dt_str[10:]:
-        tz_offset = datetime.now().astimezone().strftime("%z")
+        if user_tz:
+            tz_offset = user_tz
+        else:
+            tz_offset = datetime.now().astimezone().strftime("%z")
         if tz_offset and len(tz_offset) == 5:
             tz_offset = f"{tz_offset[:3]}:{tz_offset[3:]}"
         return f"{dt_str}{tz_offset}" if tz_offset else f"{dt_str}Z"
@@ -48,9 +51,10 @@ def create_event(
 
         service = get_calendar_service(user_id=user_id)
         if service is None:
-            auth_url = (
-                f"http://localhost:8000/auth/google?user_id={user_id or 'default'}"
-            )
+            from src.integrations.google.auth import generate_auth_token
+
+            token = generate_auth_token(user_id) if user_id else "default"
+            auth_url = f"http://localhost:8000/auth/google?token={token}"
             return {
                 "status": "auth_required",
                 "event_id": "",
