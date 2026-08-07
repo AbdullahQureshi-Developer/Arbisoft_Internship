@@ -1,0 +1,29 @@
+# Python & Virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Environment Variables
+.env
+
+# Database & Logs
+*.db
+*.db-*
+*.sqlite3
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+
+# Google Credentials & Tokens
+credentials.json
+token.json
+src/integrations/google/credentials.json
+src/integrations/google/token.json
+
+.agents/

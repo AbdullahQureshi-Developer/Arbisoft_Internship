@@ -1,0 +1,36 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opsagent-api
+    restart: unless-stopped
+    command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - sqlite_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/opsagent.db
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opsagent-bot
+    restart: unless-stopped
+    command: uv run python -m src.slack.bot
+    env_file:
+      - .env
+    volumes:
+      - sqlite_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/opsagent.db
+    depends_on:
+      - api
+
+volumes:
+  sqlite_data:
+    name: opsagent_sqlite_data
